@@ -1928,7 +1928,13 @@ setInterval(async()=>{
 },60000);
 API.onAuth(async (ev)=>{ if(ev==='PASSWORD_RECOVERY'){ recovering=true; await refreshUser(); location.hash='nova-senha'; route(); } });
 window.addEventListener('hashchange', ()=>{ if(!$('#aiBox').classList.contains('hidden') && innerWidth<=700){ $('#aiBox').classList.add('hidden'); document.body.classList.remove('ai-aberto') } route() });
-(async()=>{ try{ await refreshUser() }catch(e){ console.error(e) } route() })();
+(async()=>{ try{ await refreshUser() }catch(e){ console.error(e) }
+  /* aberto pelo ícone do aplicativo instalado: começa no login (ou direto na área do usuário) */
+  const app=(matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone===true;
+  if(app && !VITRINE && (!location.hash||location.hash==='#inicio')){
+    history.replaceState(null,'','#'+(S.user?(S.profile?.is_admin?'admin':'aluno'):'entrar'));
+  }
+  route() })();
 
 /* ---------- leitor de apostilas dentro da plataforma ---------- */
 function abrirLeitor(url,titulo){
