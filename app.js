@@ -1,3 +1,19 @@
+/* Barra de navegação rápida: Voltar e Início em todas as telas, menos no início */
+var etuNavPassos=0;
+(function(){
+  var st=document.createElement('style');
+  st.textContent='#etuVolta{position:fixed;left:10px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:900;display:flex;gap:8px}#etuVolta.hidden{display:none}#etuVolta button{font-family:inherit;font-size:15px;font-weight:700;letter-spacing:.03em;background:#0A192F;color:#D4AF37;border:1.5px solid #D4AF37;border-radius:999px;padding:9px 14px;box-shadow:0 4px 14px rgba(0,0,0,.35);display:flex;align-items:center;gap:6px;cursor:pointer}#etuVolta button svg{width:18px;height:18px}@media(min-width:901px){#etuVolta{bottom:20px}}';
+  document.head.appendChild(st);
+  var d=document.createElement('div'); d.id='etuVolta'; d.className='hidden'; d.setAttribute('aria-label','Navegação rápida');
+  d.innerHTML='<button type="button" id="etuBtnVoltar" aria-label="Voltar à tela anterior"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M15 5l-7 7 7 7"/></svg>Voltar</button><button type="button" id="etuBtnInicio" aria-label="Ir para a página inicial"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" d="M3 11l9-8 9 8v10h-6v-6H9v6H3z"/></svg>Início</button>';
+  function por(){ document.body.appendChild(d) }
+  if(document.body) por(); else addEventListener('DOMContentLoaded',por);
+  d.querySelector('#etuBtnVoltar').onclick=function(){ if(etuNavPassos>0){ history.back() } else { location.hash='inicio' } };
+  d.querySelector('#etuBtnInicio').onclick=function(){ location.hash='inicio' };
+  var pilha=[location.hash||'#inicio'];
+  addEventListener('hashchange',function(){ var h=location.hash||'#inicio'; if(pilha.length>1 && pilha[pilha.length-2]===h) pilha.pop(); else if(pilha[pilha.length-1]!==h) pilha.push(h); etuNavPassos=pilha.length-1 });
+})();
+function etuMostraVolta(view){ var d=document.getElementById('etuVolta'); if(d) d.classList.toggle('hidden', !view || view==='inicio') }
 var pedidoInstalar=null;
 var ehSamsung=/SamsungBrowser/i.test(navigator.userAgent), ehAndroid=/Android/i.test(navigator.userAgent), ehIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
 addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); if(ehSamsung) return; pedidoInstalar=e; $$('[data-instalar]').forEach(b=>b.classList.remove('hidden')) });
@@ -1149,11 +1165,11 @@ function drawPrateleiras(){
   const auto=()=>{ clearInterval(t); t=setInterval(()=>ir(i+1),6000) };
   [...dots.children].forEach((b,k)=>b.onclick=()=>{ ir(k); auto() }); auto();
 })();
-function marcaTab(view){ const m={inicio:'inicio',cursos:'cursos',curso:'cursos',busca:'busca',aluno:'conta',entrar:'conta',admin:'conta'}[view];
+function marcaTab(view){ etuMostraVolta(view); const m={inicio:'inicio',cursos:'cursos',curso:'cursos',busca:'busca',aluno:'conta',entrar:'conta',admin:'conta'}[view];
   $('#tbMenu')?.classList.toggle('on',['mais','validar','idioma','termos','sobre'].includes(view));
   $$('#tabbar [data-tb]').forEach(a=>a.classList.toggle('on',a.dataset.tb===m));
   const c=$('#tbConta'); if(c){ const adm=S.profile?.is_admin; c.href=S.user?(adm?'#admin':'#aluno'):(VITRINE?'#matricula':'#entrar'); $('#tbContaT').textContent=S.user?(adm?'Direção':'Minha Área'):(VITRINE?'Matrícula':'Aluno') } }
-$('#tbMenu').onclick=()=>{ location.hash='mais' };
+$('#tbMenu').onclick=()=>{ if(location.hash==='#mais'){ if(etuNavPassos>0) history.back(); else location.hash='inicio' } else location.hash='mais' };
 function buscar(){ const q=($('#bsIn').value||'').trim().toLowerCase(), R=$('#bsRes'); if(!R) return;
   if(q.length<2){ R.innerHTML='<p style="color:var(--muted);margin-top:14px">Digite pelo menos duas letras.</p>'; return }
   const sem=t=>String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(), qq=sem(q);
@@ -1613,7 +1629,10 @@ $('#fSign').onsubmit = async e=>{ e.preventDefault(); const m=$('#mSign');
   const nome=$('#sNome').value.trim(), email=$('#sEmail').value.trim(), pw=$('#sPass').value;
   if(!nome||!email) return show(m,'Preencha o nome e o e-mail.','err');
   if(pw.length<6) return show(m,'A senha deve ter pelo menos 6 caracteres.','err');
-  if(!$('#sAceite').checked) return show(m,'Confirme a ciência sobre o curso livre.','err');
+  if(!$('#sAceite').checked) return show(m,'Para criar a conta, leia e aceite os Termos de Uso e o Contrato do curso.','err');
+  if(!$('#sPriv').checked) return show(m,'Para criar a conta, leia e concorde com a Política de Privacidade.','err');
+  try{ localStorage.setItem('etu_termos_aceite', JSON.stringify({versao:'2026-11-13', data:new Date().toLocaleString('pt-BR')})) }catch(_){}
+  try{ localStorage.setItem('etu_privacidade_aceite', JSON.stringify({versao:'2026-11-13', data:new Date().toLocaleString('pt-BR')})) }catch(_){}
   try{ await API.signUp(nome,$('#sTel').value.trim(),email,pw,$('#sCurso').value); await refreshUser();
     if(S.user) location.hash='aluno'; else show(m,'Conta criada! Enviamos um e-mail de confirmação. Abra o link e depois entre na plataforma.','ok');
   }catch(er){ show(m, er.message,'err') } };
