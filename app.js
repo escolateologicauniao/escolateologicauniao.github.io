@@ -129,6 +129,17 @@ function SupaBackend(){
     async carteirinhas(){ return err(await sb.from('carteirinhas_pdf').select('*').eq('user_id',S.user.id)) || [] },
     async avisosPessoais(){ return err(await sb.from('notificacoes').select('*').eq('user_id',S.user.id).order('criado_em',{ascending:false}).limit(100)) || [] },
     async lerAvisos(ids){ if(ids.length) err(await sb.rpc('ler_notificacoes',{p_ids:ids})) },
+    async links(){ const {data}=await sb.rpc('etu_links'); return (data&&data[0])||{} },
+    async linksSalvar(g,y){ err(await sb.rpc('etu_links_salvar',{p_grupo:g,p_youtube:y})) },
+    async mensagensAnimo(){ return err(await sb.from('mensagens_animo').select('*').eq('ativa',true)) || [] },
+    async animoConfig(){ const r=err(await sb.rpc('animo_config')); return (r&&r[0])||null },
+    async animoSalvar(ativo,dias,modo){ err(await sb.rpc('animo_config_salvar',{p_ativo:ativo,p_dias:dias,p_modo:modo})) },
+    async animoParados(){ return err(await sb.rpc('animo_parados')) || [] },
+    async animoPreparar(uid){ const r=err(await sb.rpc('animo_preparar',{p_user:uid})); return r&&r[0] },
+    async animoRegistrar(uid,msg,texto,canais){ err(await sb.rpc('animo_registrar',{p_user:uid,p_mensagem:msg,p_texto:texto,p_origem:'manual',p_canais:canais})) },
+    async animoEnviar(uid,canais){ const {data,error}=await sb.functions.invoke('animo',{body:{aluno:uid,canais}}); if(error) throw new Error('O envio automático ainda não está ativado no servidor.'); if(data?.erro) throw new Error(data.erro); return data },
+    async animoVapid(){ const {data}=await sb.rpc('animo_vapid'); return data||null },
+    async pushSalvar(s){ const j=s.toJSON(); err(await sb.from('push_inscricoes').upsert({endpoint:j.endpoint,user_id:S.user.id,p256dh:j.keys.p256dh,auth:j.keys.auth})) },
     async publicarCarteirinha(uid,cid,file){
       if(!S.profile?.is_admin) throw new Error('Exclusivo da Direção.');
       await validarCarteirinhaPDF(file);
@@ -499,6 +510,7 @@ async function route(){
   if(view==='comunidade') drawComunidade();
   if(view==='mais') $$('.mais .when-in').forEach(e=>e.style.display=S.user?'':'none');
   if(view==='aluno') drawPerfil();
+  if(view==='aluno') setTimeout(drawLembretes,300);
   if(view==='busca'){ setTimeout(()=>$('#bsIn').focus(),100); buscar() }
   if(view==='inicio') drawPrateleiras();
   marcaTab(view);
@@ -837,6 +849,7 @@ async function renderAdmin(){
   drawAulas();
   drawConfig();
   drawAiAdm(); drawAtend(); drawContab(); drawSec();
+  drawAnimo(); drawDivulgacao();
 }
 function drawAlunos(){
   const q = ($('#busca').value||'').toLowerCase();
@@ -2036,3 +2049,176 @@ async function drawComunidade(){
 document.addEventListener('click',e=>{ if(e.target.closest('[data-instalar]')){ e.preventDefault(); instalarApp() } });
 if('serviceWorker' in navigator && EMBED_OK && /^https?:$/.test(location.protocol)){ addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{})) }
 setTimeout(drawVideoDiretor,0);
+
+/* ===== Ânimo aos alunos parados (Painel da Direção) e lembretes no celular (Minha Área) ===== */
+function animoWhats(tel,texto){ let n=String(tel||'').replace(/\D/g,''); if(n.length===10||n.length===11) n='55'+n; return n.length>=12?'https://wa.me/'+n+'?text='+encodeURIComponent(texto):'' }
+async function drawAnimo(){
+  if(API.demo || typeof API.animoConfig!=='function') return;
+  const pai=document.querySelector('[data-tabpanel="alunos"]'); if(!pai) return;
+  let box=document.getElementById('animoBox');
+  if(!box){ box=document.createElement('div'); box.className='panel'; box.id='animoBox'; pai.appendChild(box) }
+  let cfg=null, lista=[];
+  try{ cfg=await API.animoConfig(); lista=await API.animoParados() }catch(e){ box.innerHTML='<h3>Mensagens de ânimo</h3><p style="color:var(--muted)">Para usar esta função, rode no Supabase o script 06_animo.sql.</p>'; return }
+  if(!cfg){ box.innerHTML='<h3>Mensagens de ânimo</h3><p>Configuração não encontrada.</p>'; return }
+  const linhas=lista.map(a=>`<tr><td><b>${esc(a.nome||'')}</b><br><span style="font-size:14px;color:var(--muted)">${esc(a.curso_titulo||'')}</span></td>
+    <td><b>${a.dias}</b> dias sem estudar<br><span style="font-size:14px;color:var(--muted)">${a.ultimo_animo?'Último ânimo: '+fmtDate(String(a.ultimo_animo).slice(0,10)):'Ainda não recebeu ânimo'}</span></td>
+    <td><div class="chips"><button class="btn btn-gold btn-sm" data-animo-env="${a.user_id}">Enviar agora</button>
+    <button class="btn btn-navy btn-sm" data-animo-wa="${a.user_id}" ${a.telefone?'':'disabled title="Aluno sem telefone"'}>WhatsApp</button></div></td></tr>`).join('');
+  box.innerHTML=`<h3>Mensagens de ânimo aos alunos</h3>
+   <p style="margin:0 0 12px;color:var(--muted);font-size:16px">Quem fica <b>${cfg.dias} dias</b> sem concluir aulas ou fazer provas recebe uma palavra de ânimo com um versículo diferente (${cfg.mensagens} mensagens no banco). Envios nos últimos 30 dias: <b>${cfg.enviadas_30d}</b>.</p>
+   <div class="chips" style="align-items:center;margin-bottom:12px">
+    <span class="pill ${cfg.ativo?'ok':'off'}">${cfg.ativo?'ENVIO AUTOMÁTICO LIGADO':'ENVIO AUTOMÁTICO PAUSADO'}</span>
+    <button class="btn ${cfg.ativo?'btn-red':'btn-gold'} btn-sm" id="animoLiga">${cfg.ativo?'Pausar envios automáticos':'Retomar envios automáticos'}</button>
+   </div>
+   <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+    <div><label for="animoDias">Dias sem estudar</label><input id="animoDias" type="number" min="2" max="60" value="${cfg.dias}" style="width:110px"></div>
+    <div><label for="animoModo">Mensagens</label><select id="animoModo"><option value="banco" ${cfg.modo==='banco'?'selected':''}>Banco de mensagens aprovadas</option><option value="ia" ${cfg.modo==='ia'?'selected':''}>Agente com IA personaliza (usa o banco se a IA falhar)</option></select></div>
+    <button class="btn btn-line btn-sm" id="animoSalva">Salvar</button>
+   </div>
+   <div class="tbl-wrap"><table><thead><tr><th>Aluno</th><th>Situação</th><th>Enviar</th></tr></thead><tbody>${linhas||'<tr><td colspan="3">Nenhum aluno parado no momento. Glória a Deus!</td></tr>'}</tbody></table></div>
+   <div class="msg hidden" id="animoMsg"></div>`;
+  const msg=(t,tipo)=>{ const m=$('#animoMsg'); m.className='msg '+(tipo||'ok'); m.textContent=t };
+  $('#animoLiga').onclick=async()=>{ try{ await API.animoSalvar(!cfg.ativo,null,null); drawAnimo() }catch(e){ msg(e.message,'err') } };
+  $('#animoSalva').onclick=async()=>{ const d=parseInt($('#animoDias').value,10); if(!(d>=2&&d<=60)) return msg('Escolha de 2 a 60 dias.','err');
+    try{ await API.animoSalvar(null,d,$('#animoModo').value); msg('Configuração salva.'); setTimeout(drawAnimo,600) }catch(e){ msg(e.message,'err') } };
+  $$('[data-animo-env]').forEach(b=>b.onclick=async()=>{ b.disabled=true;
+    try{ const r=await API.animoEnviar(b.dataset.animoEnv,['aviso','email','push']); msg(`Mensagem enviada: aviso no aplicativo${r.emails?', e-mail':''}${r.notificacoes?', notificação no celular':''}.`); setTimeout(drawAnimo,800) }
+    catch(e){ try{ const p=await API.animoPreparar(b.dataset.animoEnv); await API.animoRegistrar(b.dataset.animoEnv,p.mensagem_id,p.texto,'aviso'); msg('Aviso enviado no aplicativo. (E-mail e celular dependem da ativação no servidor.)'); setTimeout(drawAnimo,800) }catch(e2){ msg(e2.message,'err'); b.disabled=false } } });
+  $$('[data-animo-wa]').forEach(b=>b.onclick=async()=>{ const a=lista.find(x=>x.user_id===b.dataset.animoWa);
+    try{ const p=await API.animoPreparar(a.user_id); const link=animoWhats(a.telefone,p.texto); if(!link) return msg('Telefone do aluno incompleto.','err');
+      modal(`<h3>Mensagem para ${esc(a.nome||'')}</h3><textarea id="animoTxt" rows="12" style="width:100%">${esc(p.texto)}</textarea><p style="font-size:15px;color:var(--muted)">Pode ajustar o texto antes de enviar.</p><div class="acts"><button class="btn btn-gold" id="animoAbrirWa">Abrir no WhatsApp</button><button class="btn" data-close>Cancelar</button></div>`);
+      $('#animoAbrirWa').onclick=async()=>{ const t=$('#animoTxt').value; window.open(animoWhats(a.telefone,t),'_blank'); try{ await API.animoRegistrar(a.user_id,p.mensagem_id,t,'whatsapp') }catch(_){} document.querySelector('[data-close]')?.click(); setTimeout(drawAnimo,800) };
+    }catch(e){ msg(e.message,'err') } });
+}
+function b64ParaBytes(b){ const p='='.repeat((4-b.length%4)%4); const s=atob((b+p).replace(/-/g,'+').replace(/_/g,'/')); return Uint8Array.from([...s].map(c=>c.charCodeAt(0))) }
+async function drawLembretes(){
+  if(API.demo || typeof API.animoVapid!=='function' || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  const v=document.querySelector('[data-view="aluno"] .wrap[style]'); if(!v) return;
+  let box=document.getElementById('lembBox'); if(!box){ box=document.createElement('div'); box.className='panel'; box.id='lembBox'; box.style.marginTop='28px'; const ref=document.getElementById('perfilBox'); ref?ref.parentNode.insertBefore(box,ref):v.appendChild(box) }
+  const reg=await navigator.serviceWorker.getRegistration(); const sub=reg?await reg.pushManager.getSubscription():null;
+  if(Notification.permission==='granted' && sub){ box.innerHTML='<h3>Lembretes no celular</h3><p style="margin:0;color:var(--muted)">Ativados. Você receberá palavras de ânimo da escola quando ficar alguns dias sem estudar.</p>'; return }
+  if(Notification.permission==='denied'){ box.innerHTML='<h3>Lembretes no celular</h3><p style="margin:0;color:var(--muted)">As notificações estão bloqueadas neste aparelho. Para ativar, libere as notificações do site nas configurações do navegador.</p>'; return }
+  box.innerHTML='<h3>Lembretes no celular</h3><p style="margin:0 0 12px;color:var(--muted)">Receba uma palavra de ânimo com versículo quando ficar alguns dias sem estudar. Você pode desativar quando quiser.</p><button class="btn btn-gold btn-sm" id="lembAtiva">Ativar lembretes</button> <span id="lembMsg" style="font-size:15px"></span>';
+  $('#lembAtiva').onclick=async()=>{ const m=$('#lembMsg');
+    try{ const chave=await API.animoVapid(); if(!chave){ m.textContent='Os lembretes ainda estão sendo preparados pela escola.'; return }
+      if(await Notification.requestPermission()!=='granted'){ m.textContent='Permissão não concedida.'; return }
+      const r=reg||await navigator.serviceWorker.register('./sw.js'); await navigator.serviceWorker.ready;
+      const s=await r.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ParaBytes(chave)}); await API.pushSalvar(s); drawLembretes() }
+    catch(e){ m.textContent='Não foi possível ativar neste aparelho.' } };
+}
+
+/* ===== Divulgação: gerador de postagens (imagem + texto) para WhatsApp, grupo e e-mail ===== */
+const DIV_SITE='escolateologicauniao.github.io';
+const DIV_YT_PADRAO='https://www.youtube.com/@PalavradeDeus_24';
+const DIV_PERGUNTAS=[
+ ['Qual versículo tem sustentado você nesta semana?','Salmo 119.105','Lâmpada para os meus pés é tua palavra e luz, para o meu caminho.'],
+ ['Que atributo de Deus mais tem tocado o seu coração ultimamente: o amor, a fidelidade, a santidade ou a misericórdia? Por quê?','Lamentações 3.23','Novas são cada manhã; grande é a tua fidelidade.'],
+ ['Qual personagem bíblico mais ensinou você sobre perseverança? Conte para o grupo.','Hebreus 12.1','Corramos, com paciência, a carreira que nos está proposta.'],
+ ['Se você tivesse de explicar a Trindade a uma criança, por qual versículo começaria?','Mateus 28.19','Batizando-os em nome do Pai, e do Filho, e do Espírito Santo.'],
+ ['Qual foi a maior lição que a Escola Dominical deixou para você este mês?','Atos 17.11','Examinando cada dia nas Escrituras se estas coisas eram assim.'],
+ ['Deixe aqui o seu pedido de oração. Vamos orar uns pelos outros.','Tiago 5.16','Orai uns pelos outros, para que sareis.'],
+];
+let DIV={links:{},msgs:[],img:null,texto:'',brasao:null,selo:null};
+function divCarregaImg(src){ return new Promise(r=>{ const i=new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src }) }
+function divQuebra(ctx,txt,larg){ const out=[]; for(const par of String(txt).split('\n')){ let l=''; for(const w of par.split(' ')){ const t=l?l+' '+w:w; if(ctx.measureText(t).width>larg&&l){ out.push(l); l=w } else l=t } out.push(l) } return out }
+async function divImagem(o){
+  if(!DIV.brasao) DIV.brasao=await divCarregaImg('./brasao-redondo.webp');
+  if(!DIV.selo) DIV.selo=await divCarregaImg('./selo-fita.webp');
+  const c=document.createElement('canvas'); c.width=1080; c.height=1080; const x=c.getContext('2d');
+  const g=x.createRadialGradient(540,320,60,540,540,820); g.addColorStop(0,'#1d3263'); g.addColorStop(.6,'#0A192F'); g.addColorStop(1,'#050d1c'); x.fillStyle=g; x.fillRect(0,0,1080,1080);
+  x.strokeStyle='#C9A24A'; x.lineWidth=3; x.strokeRect(24,24,1032,1032); x.strokeStyle='rgba(201,162,74,.45)'; x.lineWidth=1.5; x.strokeRect(36,36,1008,1008);
+  if(DIV.brasao){ x.save(); x.shadowColor='rgba(0,0,0,.55)'; x.shadowBlur=30; x.beginPath(); x.arc(540,175,112,0,Math.PI*2); x.closePath(); x.clip(); x.drawImage(DIV.brasao,428,63,224,224); x.restore(); x.strokeStyle='rgba(201,162,74,.6)'; x.lineWidth=4; x.beginPath(); x.arc(540,175,113,0,Math.PI*2); x.stroke() }
+  x.textAlign='center'; x.fillStyle='#E6CC86'; x.font='24px Georgia, serif'; x.fillText((o.kicker||'ESCOLA TEOLÓGICA UNIÃO').split('').join(String.fromCharCode(8202)),540,345);
+  x.font='bold 64px Georgia, serif'; const t1=divQuebra(x,o.titulo||'',900).slice(0,3); let y=430;
+  t1.forEach((l,i)=>{ x.fillStyle=(i===t1.length-1&&t1.length>1)?'#D4AF37':'#FFFFFF'; x.fillText(l,540,y); y+=74 });
+  const lg=x.createLinearGradient(310,0,770,0); lg.addColorStop(0,'rgba(212,175,55,0)'); lg.addColorStop(.5,'#D4AF37'); lg.addColorStop(1,'rgba(212,175,55,0)'); x.fillStyle=lg; x.fillRect(310,y-20,460,2);
+  x.fillStyle='#EFE6D0'; x.font='32px Georgia, serif'; y+=40; for(const l of divQuebra(x,o.sub||'',800).slice(0,4)){ x.fillText(l,540,y); y+=44 }
+  if(o.verso){ x.textAlign='left'; x.fillStyle='#E6CC86'; x.font='italic 27px Georgia, serif'; const vl=divQuebra(x,'“'+o.verso+'”',690).slice(0,4); let vy=1000-36*vl.length-30; for(const l of vl){ x.fillText(l,90,vy); vy+=36 } x.fillStyle='#C9A24A'; x.font='bold 22px Georgia, serif'; x.fillText((o.ref||'').toUpperCase(),90,vy+6) }
+  if(DIV.selo){ const w=150,h=w*DIV.selo.height/DIV.selo.width; x.drawImage(DIV.selo,1080-62-w,1080-50-h,w,h) }
+  return c;
+}
+function divRodape(longa){
+  const L=DIV.links||{}; let r='\n\n🔗 *Plataforma da escola:* '+DIV_SITE;
+  if(L.grupo_whatsapp) r+='\n👥 *Grupo de estudos:* '+L.grupo_whatsapp;
+  if(longa) r+='\n▶️ *Canal no YouTube:* '+(L.canal_youtube||DIV_YT_PADRAO);
+  return r+'\n\n*Escola Teológica União*\nFormação Bíblica, Teológica e Ministerial';
+}
+function divMonta(tipo,longa,f){
+  const yt=(DIV.links&&DIV.links.canal_youtube)||DIV_YT_PADRAO;
+  if(tipo==='animo'){ const m=DIV.msgs.length?DIV.msgs[Math.floor(Math.random()*DIV.msgs.length)]:{referencia:'Gálatas 6.9',versiculo:'E não nos cansemos de fazer bem, porque a seu tempo ceifaremos, se não houvermos desfalecido.',texto:'Quem persevera no estudo da Palavra colhe firmeza na fé, preparo para ensinar e ousadia para pregar.'};
+    let t=`🙏 *PALAVRA DE ÂNIMO*\n\nA paz do Senhor, amados!\n\n“${m.versiculo}” (${m.referencia})\n\n${m.texto}`;
+    if(longa) t+=`\n\n📌 *Para refletir hoje:*\n• O que Deus tem semeado em você nesta estação?\n• Que passo de fidelidade você pode dar hoje?\n• Por quem você vai orar ainda hoje?\n\nBusque a presença de Deus: separe um tempo de oração e de leitura da Palavra. Quem permanece nEle dá muito fruto (João 15.5).`;
+    return {texto:t+divRodape(longa), img:{kicker:'PALAVRA DE ÂNIMO',titulo:'Não desista. A colheita vem.',sub:'Uma palavra para fortalecer a sua fé hoje.',verso:m.versiculo,ref:m.referencia}} }
+  if(tipo==='curso'){ const c=curso(f.curso)||{}; const breve=c.em_breve===true; const d=(S.discs||[]).filter(x=>x.curso_id===c.id).map(x=>x.nome);
+    let t=`📖 *${String(c.titulo||'').toUpperCase()}*\n${breve?'_Em breve na Escola Teológica União_':'_Matrículas abertas na Escola Teológica União_'}\n\nA paz do Senhor, amados!\n\n${c.desc||c.descricao||''}`;
+    if(longa){ if(d.length) t+='\n\n📚 *O que você vai estudar:*\n'+d.slice(0,10).map(n=>'• '+n).join('\n');
+      t+='\n\n✅ Apostila completa em PDF\n✅ Aulas e avaliações\n✅ Certificado de Curso Livre de Teologia\n✅ Estudo no seu ritmo, pelo celular'; }
+    t+=breve?'\n\nAcompanhe a escola para ser avisado do lançamento.':'\n\nFaça a sua inscrição pela plataforma.';
+    t+='\n\n“Procura apresentar-te a Deus aprovado, como obreiro que não tem de que se envergonhar, que maneja bem a palavra da verdade” (2 Timóteo 2.15)';
+    return {texto:t+divRodape(longa), img:{kicker:breve?'EM BREVE':'MATRÍCULAS ABERTAS',titulo:c.titulo||'Curso Livre de Teologia',sub:'Curso Livre de Teologia — Formação Bíblica, Teológica e Ministerial',verso:'Procura apresentar-te a Deus aprovado, como obreiro que não tem de que se envergonhar.',ref:'2 Timóteo 2.15'}} }
+  if(tipo==='documentos'){ let t=`🎓 *CERTIFICADO E CARTEIRA DE ESTUDANTE*\n\nA paz do Senhor, amados!\n\nNa Escola Teológica União o seu esforço é reconhecido:\n\n✅ *Certificado de conclusão*, ao concluir todas as aulas e avaliações do curso\n✅ *Carteira de Estudante*, com foto e validade, para quem tem matrícula ativa\n✅ *Código de verificação* em cada documento, para comprovar a autenticidade`;
+    if(longa) t+=`\n\n📚 Os cursos vão do *Básico ao Avançado*, com apostilas completas, aulas e avaliações, e você estuda no seu ritmo, pelo celular ou pelo computador.\n\n_Curso livre de Teologia: não equivale a curso de graduação ou pós-graduação._`;
+    t+=`\n\n“Procura apresentar-te a Deus aprovado, como obreiro que não tem de que se envergonhar” (2 Timóteo 2.15)`;
+    return {texto:t+divRodape(longa), img:{kicker:'CERTIFICADO E CARTEIRA',titulo:'Seu esforço reconhecido',sub:'Certificado de conclusão e Carteira de Estudante, com código de verificação.',verso:'Procura apresentar-te a Deus aprovado, como obreiro que não tem de que se envergonhar.',ref:'2 Timóteo 2.15'}} }
+  if(tipo==='youtube'){ let t=`▶️ *CONHEÇA O CANAL DA ESCOLA NO YOUTUBE*\n\nA paz do Senhor, amados!\n\nNo nosso canal você acompanha o trabalho missionário e voluntário que realizamos na *África, em Moçambique*, levando a Palavra de Deus e o amor de Cristo onde há grande necessidade.`;
+    t+=longa?`\n\n📺 *Em breve, também no canal:*\n• Aulas e videoaulas da Escola Teológica União\n• Pregações e estudos bíblicos\n• Ensinamentos de Teologia para o dia a dia da igreja\n\n🙌 *Como você pode ajudar:*\n1. Inscreva-se no canal e ative o sininho 🔔\n2. Assista e compartilhe os vídeos com sua família e sua igreja\n3. Convide amigos a se inscreverem\n\nCada inscrição e cada compartilhamento ajudam a Palavra de Deus a chegar mais longe.\n\n“Ide por todo o mundo, pregai o evangelho a toda criatura” (Marcos 16.15)`:`\n\nEm breve também teremos aulas, pregações e ensinamentos bíblicos. Inscreva-se e ajude a divulgar a Palavra de Deus!`;
+    t+=`\n\n👉 *Quem quiser conhecer o canal, toque aqui:*\n${yt}`;
+    return {texto:t+divRodape(false), img:{kicker:'CANAL NO YOUTUBE',titulo:'Missões na África: a Palavra que alcança vidas',sub:'Trabalho missionário e voluntário em Moçambique. Em breve: aulas, pregações e estudos bíblicos.',verso:'Ide por todo o mundo, pregai o evangelho a toda criatura.',ref:'Marcos 16.15'}} }
+  if(tipo==='grupo'){ let t=`👥 *VENHA ESTUDAR A PALAVRA CONOSCO*\n\nA paz do Senhor!\n\nO grupo de estudos da Escola Teológica União é um lugar de comunhão, estudo bíblico e edificação: palavras de ânimo, estudos curtos, Escola Dominical, esboços de pregação e avisos dos cursos.`;
+    t+=longa?'\n\n📌 *Regras do grupo:*\n• Respeito e linguagem cristã\n• Assuntos bíblicos e da escola\n• Sem propagandas ou correntes\n\n“Oh! Quão bom e quão suave é que os irmãos vivam em união!” (Salmo 133.1)':'';
+    t+='\n\n👉 *Toque para entrar:* '+((DIV.links&&DIV.links.grupo_whatsapp)||'(cadastre o link do grupo no painel)');
+    return {texto:t+divRodape(longa), img:{kicker:'GRUPO DE ESTUDOS',titulo:'Venha estudar a Palavra conosco',sub:'Comunhão, estudo bíblico e edificação.',verso:'Oh! Quão bom e quão suave é que os irmãos vivam em união!',ref:'Salmo 133.1'}} }
+  if(tipo==='pergunta'){ const p=DIV_PERGUNTAS[Math.floor(Math.random()*DIV_PERGUNTAS.length)];
+    const t=`💬 *PERGUNTA PARA O GRUPO*\n\nA paz do Senhor, amados!\n\n${p[0]}\n\nResponda aqui embaixo e edifique os irmãos com a sua resposta. 👇\n\n“${p[2]}” (${p[1]})`;
+    return {texto:t+divRodape(longa), img:{kicker:'PERGUNTA PARA O GRUPO',titulo:'Participe da conversa!',sub:p[0],verso:p[2],ref:p[1]}} }
+  // estudo, ebd, esboco, aviso: conteúdo escrito pelo Diretor
+  const rot={estudo:['📖','ESTUDO BÍBLICO','Estudo bíblico'],ebd:['🏫','ESCOLA BÍBLICA DOMINICAL','Escola Dominical'],esboco:['🎤','ESBOÇO DE PREGAÇÃO','Esboço de pregação'],aviso:['📢','AVISO DA ESCOLA','Aviso']}[tipo]||['📢','AVISO','Aviso'];
+  let t=`${rot[0]} *${(f.titulo||rot[2]).toUpperCase()}*\n\nA paz do Senhor, amados!\n\n${f.corpo||''}`;
+  if(f.verso) t+=`\n\n“${f.verso}”${f.ref?' ('+f.ref+')':''}`;
+  return {texto:t+divRodape(longa), img:{kicker:rot[1],titulo:f.titulo||rot[2],sub:(f.corpo||'').split('\n')[0].slice(0,160),verso:f.verso,ref:f.ref}};
+}
+async function drawDivulgacao(){
+  if(API.demo || typeof API.links!=='function') return;
+  const tabs=document.querySelector('.tabs'); if(!tabs) return;
+  if(!document.querySelector('[data-tab="divulga"]')){
+    const b=document.createElement('button'); b.dataset.tab='divulga'; b.setAttribute('role','tab'); b.textContent='Divulgação'; tabs.appendChild(b);
+    const p=document.createElement('div'); p.dataset.tabpanel='divulga'; p.className='hidden'; document.querySelector('[data-tabpanel="alunos"]').parentNode.appendChild(p);
+    $$('.tabs button').forEach(bb=>bb.onclick=()=>{ $$('.tabs button').forEach(x=>x.classList.toggle('on',x===bb)); $$('[data-tabpanel]').forEach(pp=>pp.classList.toggle('hidden',pp.dataset.tabpanel!==bb.dataset.tab)) });
+  }
+  try{ DIV.links=await API.links() }catch(_){ DIV.links={} }
+  try{ DIV.msgs=await API.mensagensAnimo() }catch(_){ DIV.msgs=[] }
+  const p=document.querySelector('[data-tabpanel="divulga"]');
+  const ops=CURSOS.map(c=>`<option value="${esc(c.id)}">${esc(c.titulo)}${c.em_breve?' (em breve)':''}</option>`).join('');
+  p.innerHTML=`<div class="panel"><h3>Gerador de postagens</h3>
+   <p style="margin:0 0 12px;color:var(--muted);font-size:16px">Monte a imagem (brasão, título, versículo e selo) e o texto. Depois toque em <b>Compartilhar</b> e escolha o grupo no WhatsApp. Mensagens longas aparecem com “Ler mais”.</p>
+   <div style="display:flex;gap:12px;flex-wrap:wrap">
+    <div><label for="dvTipo">Tipo</label><select id="dvTipo"><option value="animo">Palavra de ânimo</option><option value="curso">Anúncio de curso / matrícula</option><option value="documentos">Certificado e carteira de estudante</option><option value="youtube">Canal do YouTube</option><option value="grupo">Convite para o grupo</option><option value="pergunta">Pergunta para o grupo</option><option value="estudo">Estudo bíblico curto</option><option value="ebd">Escola Dominical</option><option value="esboco">Esboço de pregação</option><option value="aviso">Aviso da escola</option></select></div>
+    <div><label for="dvTam">Tamanho</label><select id="dvTam"><option value="curta">Curta</option><option value="longa">Longa (com “Ler mais”)</option></select></div>
+    <div id="dvCursoBox"><label for="dvCurso">Curso</label><select id="dvCurso">${ops}</select></div>
+   </div>
+   <div id="dvLivre" class="hidden"><label for="dvTit">Título</label><input id="dvTit" placeholder="Ex.: O Deus que vê (Gênesis 16.13)">
+    <label for="dvCorpo">Texto (tópicos curtos, um por linha)</label><textarea id="dvCorpo" rows="7"></textarea>
+    <div style="display:flex;gap:12px;flex-wrap:wrap"><div style="flex:2;min-width:220px"><label for="dvVerso">Versículo (ARC)</label><input id="dvVerso"></div><div style="flex:1;min-width:140px"><label for="dvRef">Referência</label><input id="dvRef" placeholder="Gênesis 16.13"></div></div></div>
+   <div class="chips" style="margin-top:14px"><button class="btn btn-gold btn-sm" id="dvGerar">Gerar postagem</button></div>
+   <div id="dvRes" class="hidden" style="margin-top:16px">
+    <img id="dvImg" alt="Imagem da postagem" style="width:100%;max-width:420px;border-radius:8px;display:block;box-shadow:0 6px 18px rgba(0,0,0,.25)">
+    <label for="dvTexto" style="margin-top:12px">Texto (pode editar antes de enviar)</label><textarea id="dvTexto" rows="14"></textarea>
+    <div class="chips" style="margin-top:10px"><button class="btn btn-gold btn-sm" id="dvShare">Compartilhar (WhatsApp)</button><button class="btn btn-navy btn-sm" id="dvCopia">Copiar texto</button><button class="btn btn-line btn-sm" id="dvBaixa">Baixar imagem</button></div>
+    <div class="msg hidden" id="dvMsg"></div></div></div>
+   <div class="panel"><h3>Links da escola</h3>
+    <label for="dvGrupo">Link do grupo do WhatsApp</label><input id="dvGrupo" placeholder="https://chat.whatsapp.com/..." value="${esc(DIV.links.grupo_whatsapp||'')}">
+    <label for="dvYt">Canal do YouTube</label><input id="dvYt" value="${esc(DIV.links.canal_youtube||DIV_YT_PADRAO)}">
+    <div class="chips" style="margin-top:10px"><button class="btn btn-line btn-sm" id="dvSalvaLinks">Salvar links</button></div><div class="msg hidden" id="dvLinksMsg"></div></div>`;
+  const ajusta=()=>{ const t=$('#dvTipo').value; $('#dvCursoBox').classList.toggle('hidden',t!=='curso'); $('#dvLivre').classList.toggle('hidden',!['estudo','ebd','esboco','aviso'].includes(t)) };
+  $('#dvTipo').onchange=ajusta; ajusta();
+  const aviso=(id,t,tp)=>{ const m=$(id); m.className='msg '+(tp||'ok'); m.textContent=t };
+  $('#dvSalvaLinks').onclick=async()=>{ try{ await API.linksSalvar($('#dvGrupo').value.trim(),$('#dvYt').value.trim()); DIV.links=await API.links(); aviso('#dvLinksMsg','Links salvos.') }catch(e){ aviso('#dvLinksMsg',e.message,'err') } };
+  $('#dvGerar').onclick=async()=>{ const r=divMonta($('#dvTipo').value,$('#dvTam').value==='longa',{curso:$('#dvCurso').value,titulo:$('#dvTit').value.trim(),corpo:$('#dvCorpo').value.trim(),verso:$('#dvVerso').value.trim(),ref:$('#dvRef').value.trim()});
+    const cv=await divImagem(r.img); DIV.img=await new Promise(ok=>cv.toBlob(ok,'image/jpeg',.92)); $('#dvImg').src=URL.createObjectURL(DIV.img); $('#dvTexto').value=r.texto; $('#dvRes').classList.remove('hidden'); $('#dvRes').scrollIntoView({behavior:'smooth'}) };
+  $('#dvCopia').onclick=async()=>{ try{ await navigator.clipboard.writeText($('#dvTexto').value); aviso('#dvMsg','Texto copiado. Cole no WhatsApp.') }catch(_){ $('#dvTexto').select(); aviso('#dvMsg','Selecione e copie o texto.','err') } };
+  $('#dvBaixa').onclick=()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(DIV.img); a.download='postagem-etu.jpg'; a.click() };
+  $('#dvShare').onclick=async()=>{ const txt=$('#dvTexto').value; const f=new File([DIV.img],'postagem-etu.jpg',{type:'image/jpeg'});
+    try{ if(navigator.canShare&&navigator.canShare({files:[f]})){ try{ await navigator.clipboard.writeText(txt) }catch(_){} await navigator.share({files:[f],text:txt}); aviso('#dvMsg','Se o texto não aparecer junto da imagem no WhatsApp, toque e segure na legenda e escolha Colar: ele já está copiado.') }
+      else { window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank'); aviso('#dvMsg','Neste aparelho a imagem não pode ser compartilhada direto. Baixe a imagem e envie junto com o texto.','err') } }
+    catch(e){ if(e&&e.name!=='AbortError') aviso('#dvMsg','Não foi possível compartilhar. Use Copiar texto e Baixar imagem.','err') } };
+}
