@@ -1,3 +1,24 @@
+var pedidoInstalar=null;
+var ehSamsung=/SamsungBrowser/i.test(navigator.userAgent), ehAndroid=/Android/i.test(navigator.userAgent), ehIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
+addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); if(ehSamsung) return; pedidoInstalar=e; $$('[data-instalar]').forEach(b=>b.classList.remove('hidden')) });
+var SELO_CONFIANCA=`<div style="border:1px solid #c9a227;border-radius:10px;padding:10px 12px;margin:10px 0;background:rgba(201,162,39,.08)"><p style="margin:0 0 6px"><b>Aplicativo oficial da Escola Teológica União</b></p><p style="margin:0 0 4px">✔ Instalado pelo próprio navegador, a partir do endereço oficial <b>${location.host}</b>.</p><p style="margin:0 0 4px">✔ Não é preciso baixar nenhum arquivo de instalação.</p><p style="margin:0 0 4px">✔ Não pede acesso a contatos, fotos, mensagens ou localização.</p><p style="margin:0">✔ Funciona em celulares novos e antigos; nos aparelhos antigos aparece como atalho na tela inicial.</p></div>`;
+function linkChrome(){ const alvo=location.host+location.pathname; return 'intent://'+alvo+'#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url='+encodeURIComponent('https://play.google.com/store/apps/details?id=com.android.chrome')+';end' }
+function instalarApp(){
+  var av=document.getElementById('etu-aviso-samsung'); if(av) av.remove();
+  if(ehSamsung){
+    modal(`<h3>Instalar o aplicativo da escola</h3>${SELO_CONFIANCA}<p>O navegador <b>Samsung Internet</b> gera o aplicativo num formato antigo, e por isso o Google Play Protect mostra o aviso <i>"App de risco bloqueado"</i>. Não é vírus e nada foi instalado. Para instalar com segurança, use o <b>Google Chrome</b>:</p><p><b>1.</b> Toque no botão abaixo para abrir a escola no Chrome.<br><b>2.</b> No Chrome, toque nos três pontinhos e em <b>Instalar aplicativo</b> ou <b>Adicionar à tela inicial</b>.</p><div class="acts"><a class="btn btn-gold" href="${linkChrome()}">Abrir no Google Chrome</a><button class="btn" data-close>Fechar</button></div>`); return }
+  if(pedidoInstalar){ pedidoInstalar.prompt(); pedidoInstalar.userChoice.finally(()=>pedidoInstalar=null); return }
+  modal(`<h3>Instalar o aplicativo da escola</h3>${SELO_CONFIANCA}<p><b>No Android (Google Chrome):</b> toque nos três pontinhos do navegador e em <b>Instalar aplicativo</b> ou <b>Adicionar à tela inicial</b>.</p><p><b>No iPhone (Safari):</b> toque no botão de compartilhar e em <b>Adicionar à Tela de Início</b>.</p>${ehAndroid&&!/Chrome\//.test(navigator.userAgent)?`<p>Se o seu navegador não mostrar essa opção, abra a escola no Chrome: <a href="${linkChrome()}"><b>Abrir no Google Chrome</b></a>.</p>`:''}<p>O ícone da Escola Teológica União aparece na tela do celular e abre como aplicativo.</p><div class="acts"><button class="btn btn-gold" data-close>Entendi</button></div>`) }
+/* aviso único para quem abre pelo Samsung Internet */
+(function(){ if(!ehSamsung || matchMedia('(display-mode: standalone)').matches) return; let visto=false; try{ visto=localStorage.getItem('etu_aviso_samsung')==='1' }catch(_){}
+  if(visto) return; const d=document.createElement('div');
+  d.setAttribute('role','status'); d.id='etu-aviso-samsung';
+  d.style.cssText='position:fixed;left:10px;right:10px;bottom:84px;z-index:9999;background:#0A192F;color:#fff;border:1px solid #c9a227;border-radius:12px;padding:12px 14px;font-size:15px;line-height:1.4;box-shadow:0 6px 20px rgba(0,0,0,.4)';
+  d.innerHTML='<b style="color:#D4AF37">Aplicativo oficial da ETU</b><br>Para instalar no celular com segurança, use o <b>Google Chrome</b>. Pelo Samsung Internet o Android pode mostrar um aviso de bloqueio.<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><a href="'+linkChrome()+'" style="background:#D4AF37;color:#0A192F;padding:7px 12px;border-radius:8px;font-weight:700;text-decoration:none">Abrir no Chrome</a><button type="button" style="background:transparent;color:#fff;border:1px solid #fff;padding:7px 12px;border-radius:8px">Agora não</button></div>';
+  d.querySelector('button').onclick=()=>{ d.remove(); try{ localStorage.setItem('etu_aviso_samsung','1') }catch(_){} };
+  addEventListener('load',()=>setTimeout(()=>document.body.appendChild(d),1500));
+})();
+
 /* =====================================================================
    CONFIGURAÇÃO — preencha com os dados do seu projeto Supabase.
    Enquanto estiver vazio, a plataforma funciona em MODO DEMONSTRAÇÃO.
@@ -1993,10 +2014,6 @@ async function drawComunidade(){
 }
 
 /* ---------- aplicativo instalável ---------- */
-let pedidoInstalar=null;
-addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); pedidoInstalar=e; $$('[data-instalar]').forEach(b=>b.classList.remove('hidden')) });
-function instalarApp(){ if(pedidoInstalar){ pedidoInstalar.prompt(); pedidoInstalar.userChoice.finally(()=>pedidoInstalar=null); return }
-  modal(`<h3>Instalar o aplicativo da escola</h3><p><b>No Android (Chrome):</b> toque nos três pontinhos do navegador e em <b>Instalar aplicativo</b> ou <b>Adicionar à tela inicial</b>.</p><p><b>No iPhone (Safari):</b> toque no botão de compartilhar e em <b>Adicionar à Tela de Início</b>.</p><p>O ícone da Escola Teológica União aparece na tela do celular e abre como aplicativo.</p><div class="acts"><button class="btn btn-gold" data-close>Entendi</button></div>`) }
 document.addEventListener('click',e=>{ if(e.target.closest('[data-instalar]')){ e.preventDefault(); instalarApp() } });
 if('serviceWorker' in navigator && EMBED_OK && /^https?:$/.test(location.protocol)){ addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{})) }
 setTimeout(drawVideoDiretor,0);
