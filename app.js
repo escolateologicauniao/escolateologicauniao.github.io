@@ -14,6 +14,27 @@ var etuNavPassos=0;
   addEventListener('hashchange',function(){ var h=location.hash||'#inicio'; if(pilha.length>1 && pilha[pilha.length-2]===h) pilha.pop(); else if(pilha[pilha.length-1]!==h) pilha.push(h); etuNavPassos=pilha.length-1 });
 })();
 function etuMostraVolta(view){ var d=document.getElementById('etuVolta'); if(d) d.classList.toggle('hidden', !view || view==='inicio') }
+/* Proteção de endereço e aviso de segurança único */
+(function(){
+  var OFICIAL='escolateologicauniao.github.io', h=location.hostname;
+  var local=!h || h==='localhost' || h==='127.0.0.1' || location.protocol==='file:';
+  function por(fn){ if(document.body) fn(); else addEventListener('DOMContentLoaded',fn) }
+  if(!local && h!==OFICIAL){
+    por(function(){ var b=document.createElement('div'); b.setAttribute('role','alert');
+      b.style.cssText='position:sticky;top:0;z-index:2000;background:#7A1B2B;color:#fff;padding:12px 16px;font:600 16px/1.4 Georgia,serif;text-align:center;border-bottom:3px solid #C9A24A';
+      b.innerHTML='Atenção: este NÃO é o endereço oficial da Escola Teológica União. O endereço verdadeiro é <u>'+OFICIAL+'</u>. Não informe senha nem faça pagamentos por esta página.';
+      document.body.prepend(b) });
+    return }
+  var visto=false; try{ visto=localStorage.getItem('etu_aviso_seg')==='1' }catch(_){}
+  if(visto) return;
+  setTimeout(function(){ por(function(){ if(document.getElementById('etuAvisoSeg') || document.getElementById('etu-aviso-samsung') || document.querySelector('.modal')) return;
+    var d=document.createElement('div'); d.id='etuAvisoSeg'; d.setAttribute('role','status');
+    d.style.cssText='position:fixed;left:12px;right:12px;bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:950;max-width:560px;margin:0 auto;background:#0F1B3D;color:#F8F3E6;border:2px solid #C9A24A;border-radius:12px;padding:14px 16px;box-shadow:0 8px 26px rgba(0,0,0,.4);font:16px/1.5 Georgia,serif';
+    d.innerHTML='<div style="display:flex;gap:12px;align-items:center"><img src="selo-fita.webp" alt="" width="52" height="52" style="flex:none"><div><b style="color:#E2C47A">Você está na plataforma oficial</b><br>A escola nunca pede senha, código por SMS ou Pix fora da chave exibida aqui.</div></div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><a href="#verificar" style="color:#0F1B3D;background:#D4AF37;border-radius:8px;padding:8px 14px;text-decoration:none;font-weight:bold">Ver o selo</a><button type="button" style="font:inherit;background:transparent;color:#F8F3E6;border:1px solid #F8F3E6;border-radius:8px;padding:8px 14px">Entendi</button></div>';
+    function fecha(){ d.remove(); try{ localStorage.setItem('etu_aviso_seg','1') }catch(_){} }
+    d.querySelector('button').onclick=fecha; d.querySelector('a').addEventListener('click',fecha);
+    document.body.appendChild(d) }) },6000);
+})();
 var pedidoInstalar=null;
 var ehSamsung=/SamsungBrowser/i.test(navigator.userAgent), ehAndroid=/Android/i.test(navigator.userAgent), ehIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
 addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); if(ehSamsung) return; pedidoInstalar=e; $$('[data-instalar]').forEach(b=>b.classList.remove('hidden')) });
