@@ -27,6 +27,32 @@ var etuNavPassos=0;
   },true);
 })();
 function etuMostraVolta(view){ window.etuViewAtual=view; var d=document.getElementById('etuVolta'); if(d) d.classList.toggle('hidden', (!view || view==='inicio') && !(etuNavPassos>0)) }
+/* Versão da Play Store: o app instalado pela loja serve para estudar; matrícula e pagamento ficam fora do app */
+(function(){
+  try{
+    var q=new URLSearchParams(location.search);
+    if(q.get('app')==='play' || /^android-app:\/\/br\.com\.etu\.app/.test(document.referrer||'')) localStorage.setItem('etu_loja','1');
+    if(q.get('loja')==='0') localStorage.removeItem('etu_loja');
+  }catch(e){}
+  var LOJA=false; try{ LOJA=localStorage.getItem('etu_loja')==='1' }catch(e){}
+  window.ETU_LOJA=LOJA; if(!LOJA) return;
+  document.documentElement.classList.add('modo-loja');
+  var st=document.createElement('style');
+  st.textContent='.modo-loja .pixbox,.modo-loja .pixkey,.modo-loja a[href="#matricula"],.modo-loja [data-nav="matricula"],.modo-loja .nao-loja{display:none!important}.loja-aviso{max-width:640px;margin:30px auto;background:#fff;border:1px solid #E1D4B2;border-left:4px solid #C9A24A;border-radius:10px;padding:22px 24px;font-size:18px;line-height:1.6}';
+  document.head.appendChild(st);
+  var RX=/\bpix\b|comprovante|pagamento|pague|pagar|R\$\s?\d/i;
+  function varre(){
+    document.querySelectorAll('[data-view]:not([data-view="admin"]) p, [data-view]:not([data-view="admin"]) li, [data-view]:not([data-view="admin"]) .step, .cartao, #myPays').forEach(function(el){
+      if(el.closest('[data-view="admin"]')||el.closest('.loja-aviso')) return;
+      if(el.id==='myPays'){ var pn=el.closest('.panel'); if(pn) pn.classList.add('nao-loja'); return }
+      if(RX.test(el.textContent||'')) el.classList.add('nao-loja');
+    });
+    var m=document.querySelector('[data-view="matricula"]');
+    if(m && !m.dataset.loja){ m.dataset.loja='1'; Array.prototype.forEach.call(m.children,function(c){ c.classList.add('nao-loja') }); var av=document.createElement('div'); av.innerHTML='<div class="dash-head"><div class="wrap"><h2>Área do aluno</h2><p>Escola Teológica União</p></div></div><div class="wrap"><div class="loja-aviso"><p style="margin:0 0 12px">Este aplicativo é o ambiente de estudo dos alunos da Escola Teológica União. Entre com o e-mail e a senha da sua conta para acessar os seus cursos.</p><p style="margin:0 0 16px">As aulas grátis e a Biblioteca grátis estão abertas a todos.</p><div class="res"><a class="btn btn-gold" href="#entrar">Entrar</a><a class="btn btn-line" href="#estudos">Biblioteca grátis</a></div></div></div>'; m.appendChild(av) }
+  }
+  function liga(){ varre(); try{ new MutationObserver(function(){ clearTimeout(liga.t); liga.t=setTimeout(varre,80) }).observe(document.body,{childList:true,subtree:true}) }catch(e){} }
+  if(document.readyState==='loading') addEventListener('DOMContentLoaded',liga); else liga();
+})();
 /* Proteção de endereço e aviso de segurança único */
 (function(){
   var OFICIAL='escolateologicauniao.github.io', h=location.hostname;
@@ -1239,7 +1265,7 @@ function drawPrateleiras(){
 function marcaTab(view){ etuMostraVolta(view); const m={inicio:'inicio',cursos:'cursos',curso:'cursos',busca:'busca',aluno:'conta',entrar:'conta',admin:'conta'}[view];
   $('#tbMenu')?.classList.toggle('on',['mais','validar','idioma','termos','sobre'].includes(view));
   $$('#tabbar [data-tb]').forEach(a=>a.classList.toggle('on',a.dataset.tb===m));
-  const c=$('#tbConta'); if(c){ const adm=S.profile?.is_admin; c.href=S.user?(adm?'#admin':'#aluno'):(VITRINE?'#matricula':'#entrar'); $('#tbContaT').textContent=S.user?(adm?'Direção':'Minha Área'):(VITRINE?'Matrícula':'Aluno') } }
+  const c=$('#tbConta'); if(c){ const adm=S.profile?.is_admin; c.href=S.user?(adm?'#admin':'#aluno'):(VITRINE&&!window.ETU_LOJA?'#matricula':'#entrar'); $('#tbContaT').textContent=S.user?(adm?'Direção':'Minha Área'):(VITRINE&&!window.ETU_LOJA?'Matrícula':'Entrar') } }
 $('#tbMenu').onclick=()=>{ if(location.hash==='#mais'){ if(etuNavPassos>0) history.back(); else location.hash='inicio' } else location.hash='mais' };
 function buscar(){ const q=($('#bsIn').value||'').trim().toLowerCase(), R=$('#bsRes'); if(!R) return;
   if(q.length<2){ R.innerHTML='<p style="color:var(--muted);margin-top:14px">Digite pelo menos duas letras.</p>'; return }
@@ -1804,7 +1830,7 @@ const FAQ=[
  [/obrigad|valeu|deus te aben[çc]oe|grato|grata/i,()=>`Amém! Nós é que agradecemos. Que o Senhor abençoe os seus estudos. Se precisar de algo mais, é só escrever.`],
  [/humano|pessoa|atendente|diretor|dire[çc][ãa]o|pastor charlei|falar com algu[ée]m/i,()=>`Claro. Toque no botão “Falar com a direção (atendimento humano)”, logo abaixo, deixe o seu nome, o seu contato e a sua mensagem: o pedido chega ao painel da direção e o senhor(a) recebe a resposta pelo WhatsApp ou e-mail informado.`],
  [/^(?!.*(matr[ií]cul|pix|pag|comprovante|certificad)).*(curso|n[íi]vel|b[áa]sico|m[ée]dio|avan[çc]ado|disciplin)/i,()=>`A escola oferece o Curso Básico, o Curso Médio e o Curso Avançado de Teologia, cursos livres de formação bíblica, teológica e ministerial. Na página “Cursos”, toque em “Ver disciplinas” para conhecer a grade de cada nível. Há também uma aula grátis para experimentar.`],
- [/matr[ií]cul|inscri|valor|pre[çc]o|pagar|pagamento|pix/i,()=>`Para se matricular, abra a página “Matrícula”, escolha o curso (Básico, Médio ou Avançado) e faça o Pix para a chave (telefone) ${CONFIG.PIX_CHAVE}. Depois envie o comprovante pela plataforma ou pelo WhatsApp ${CONFIG.WHATSAPP}. A direção confere e libera o curso completo.`],
+ [/matr[ií]cul|inscri|valor|pre[çc]o|pagar|pagamento|pix/i,()=>window.ETU_LOJA?`Este aplicativo é o ambiente de estudo dos alunos. Para dúvidas sobre a sua matrícula, fale com a direção da escola pelo botão “Falar com a direção”.`:`Para se matricular, abra a página “Matrícula”, escolha o curso (Básico, Médio ou Avançado) e faça o Pix para a chave (telefone) ${CONFIG.PIX_CHAVE}. Depois envie o comprovante pela plataforma ou pelo WhatsApp ${CONFIG.WHATSAPP}. A direção confere e libera o curso completo.`],
  [/senha|esqueci|n[ãa]o consigo entrar|login|acessar/i,()=>`Na tela “Área do Aluno”, toque em “Esqueci a senha”, informe o seu e-mail e siga o link que chegar na sua caixa de entrada (confira também o spam). Para ver o que está digitando, toque em “Mostrar”, ao lado do campo da senha.`],
  [/comprovante/i,()=>`Depois de fazer o Pix, entre na sua área, abra o curso e use “Enviar comprovante”. Se preferir, envie pelo WhatsApp ${CONFIG.WHATSAPP}.`],
  [/certificad|carteir/i,()=>`O certificado é liberado quando o aluno conclui todas as aulas e provas do curso. A carteirinha é preparada pela Direção. Quando o PDF estiver disponível, você receberá um aviso na plataforma e poderá baixá-lo na sua área.`],
@@ -2280,3 +2306,23 @@ async function drawDivulgacao(){
       else { window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank'); aviso('#dvMsg','Neste aparelho a imagem não pode ser compartilhada direto. Baixe a imagem e envie junto com o texto.','err') } }
     catch(e){ if(e&&e.name!=='AbortError') aviso('#dvMsg','Não foi possível compartilhar. Use Copiar texto e Baixar imagem.','err') } };
 }
+
+/* Pedido de exclusão da conta (exigência da LGPD e da Play Store) */
+(function(){
+  function monta(){
+    var acc=document.getElementById('myAccount'); if(!acc) return; var pn=acc.closest('.panel'); if(!pn || pn.querySelector('#btnExcluirConta')) return;
+    var d=document.createElement('div'); d.style.marginTop='18px'; d.style.borderTop='1px solid #E1D4B2'; d.style.paddingTop='14px';
+    d.innerHTML='<p style="margin:0 0 8px;font-size:15px;color:#5b6070">Se não quiser mais usar a plataforma, você pode pedir a exclusão da sua conta e dos seus dados. <a href="excluir-conta.html" target="_blank" rel="noopener">Saiba o que é apagado</a>.</p><button type="button" class="btn btn-line btn-sm" id="btnExcluirConta" style="color:#7A1E2C;border-color:#7A1E2C">Pedir exclusão da minha conta</button><div class="msg hidden" id="mExcluir" style="margin-top:10px"></div>';
+    pn.appendChild(d);
+    d.querySelector('#btnExcluirConta').onclick=function(){
+      confirmBox('Pedir a exclusão da sua conta? Depois de concluída, você perde o acesso aos cursos, ao progresso, às notas e aos documentos. Esta ação não pode ser desfeita.', async function(){
+        var m=d.querySelector('#mExcluir');
+        try{
+          await API.abrirAtendimento({nome:(S.profile&&S.profile.nome)||'Aluno', contato:(S.user&&S.user.email)||'', mensagem:'PEDIDO DE EXCLUSÃO DE CONTA — o aluno pediu, pelo aplicativo, a exclusão da conta e dos dados pessoais. E-mail da conta: '+((S.user&&S.user.email)||'')+'.', conversa:[]});
+          m.className='msg ok'; m.textContent='Pedido enviado à Direção. Você receberá a confirmação pelo seu e-mail ou WhatsApp quando a exclusão for concluída.';
+        }catch(e){ m.className='msg err'; m.textContent='Não foi possível enviar agora. Tente de novo ou escreva para etu.escolateologicauniao215@gmail.com.' }
+      });
+    };
+  }
+  addEventListener('hashchange',function(){ setTimeout(monta,300) }); addEventListener('load',function(){ setTimeout(monta,800) });
+})();
