@@ -2326,3 +2326,39 @@ async function drawDivulgacao(){
   }
   addEventListener('hashchange',function(){ setTimeout(monta,300) }); addEventListener('load',function(){ setTimeout(monta,800) });
 })();
+
+/* Quadro "Aplicativo" no Menu: versão, atualização, notificações e dicas de configuração */
+(function(){
+  var VERSAO='Versão 22 · 24/11/2026';
+  function estadoNotif(){ if(!('Notification' in window)) return 'não disponíveis neste aparelho'; return Notification.permission==='granted'?'ativadas ✓':(Notification.permission==='denied'?'bloqueadas no celular':'desativadas') }
+  function monta(){
+    var v=document.querySelector('[data-view="mais"] .wrap'); if(!v || document.getElementById('etuApp')) return;
+    var d=document.createElement('div'); d.id='etuApp'; d.className='panel'; d.style.marginTop='18px'; d.style.color='#1B2238'; d.style.background='#FFFDF6';
+    d.innerHTML='<h3 style="margin:0 0 6px">Aplicativo</h3>'+
+      '<p style="margin:0 0 4px;color:#5b6070;font-size:15.5px">'+VERSAO+'</p>'+
+      '<p style="margin:0 0 12px;font-size:15.5px;color:#1B2238">Notificações: <b id="etuNotEst" style="color:#7A1B2B"></b></p>'+
+      '<div class="res"><button type="button" class="btn btn-gold btn-sm" id="etuAtualiza">Procurar atualização</button><a class="btn btn-line btn-sm when-in" href="#aluno">Ativar notificações</a></div>'+
+      '<div class="msg hidden" id="etuAtMsg" style="margin-top:10px"></div>'+
+      '<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">Configurações recomendadas no celular</summary><ol style="margin:8px 0 0;padding-left:20px;font-size:15.5px;line-height:1.55">'+
+      '<li>Segure o dedo no ícone da ETU e toque em <b>Informações do app</b> (ou no <b>i</b>).</li>'+
+      '<li><b>Notificações</b>: deixe <b>ativadas</b>, para receber os avisos da escola.</li>'+
+      '<li><b>Gerenciar o app fora de uso</b>: deixe <b>desligado</b>, para o celular não apagar as permissões nem esconder o aplicativo.</li>'+
+      '<li><b>Abrir por padrão</b>: permita abrir os links da escola no aplicativo.</li>'+
+      '<li>Se o ícone continuar antigo, desinstale o aplicativo e instale de novo pelo Chrome, no site da escola. Nada se perde: seus cursos ficam guardados na sua conta.</li></ol></details>';
+    v.appendChild(d);
+    d.querySelector('#etuNotEst').textContent=estadoNotif();
+    d.querySelector('#etuAtualiza').onclick=async function(){
+      var m=d.querySelector('#etuAtMsg'); m.className='msg info'; m.textContent='Procurando atualização…';
+      try{
+        if('serviceWorker' in navigator){ var r=await navigator.serviceWorker.getRegistration(); if(r) await r.update() }
+        if(window.caches){ var ks=await caches.keys(); await Promise.all(ks.map(function(k){ return caches.delete(k) })) }
+        m.className='msg ok'; m.textContent='Aplicativo atualizado. Abrindo a versão mais recente…';
+        setTimeout(function(){ location.reload() },900);
+      }catch(e){ m.className='msg err'; m.textContent='Não foi possível atualizar agora. Verifique a internet e tente de novo.' }
+    };
+  }
+  addEventListener('hashchange',function(){ if(location.hash==='#mais') setTimeout(monta,200) });
+  addEventListener('load',function(){ setTimeout(monta,600) });
+  /* aviso discreto quando uma versão nova é instalada */
+  try{ if('serviceWorker' in navigator){ var tinha=!!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener('controllerchange',function(){ if(!tinha) return; var t=document.createElement('div'); t.textContent='Aplicativo atualizado para a versão mais recente.'; t.style.cssText='position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:#0B1734;color:#F7EFD9;border:1px solid #C9A24A;padding:10px 16px;border-radius:10px;z-index:9999;font-size:15px;box-shadow:0 4px 14px rgba(0,0,0,.3)'; document.body.appendChild(t); setTimeout(function(){ t.remove() },5000) }) } }catch(e){}
+})();
