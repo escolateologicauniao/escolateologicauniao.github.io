@@ -2,11 +2,11 @@
 var etuNavPassos=0;
 (function(){
   var st=document.createElement('style');
-  st.textContent='#etuVolta{position:fixed;left:10px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:900;display:flex;gap:8px}#etuVolta.hidden{display:none}#etuVolta button{font-family:inherit;font-size:15px;font-weight:700;letter-spacing:.03em;background:#0A192F;color:#D4AF37;border:1.5px solid #D4AF37;border-radius:999px;padding:9px 14px;box-shadow:0 4px 14px rgba(0,0,0,.35);display:flex;align-items:center;gap:6px;cursor:pointer}#etuVolta button svg{width:18px;height:18px}@media(min-width:901px){#etuVolta{bottom:20px}}';
+  st.textContent='#etuVolta{display:inline-flex;flex:none;margin-right:10px}#etuVolta.hidden{display:none}#etuBtnInicio{display:none!important}#etuBtnVoltar{font-family:Cinzel,Georgia,serif;font-size:13px;font-weight:600;letter-spacing:.06em;background:none;color:#E2C47A;border:1px solid #C9A24A;border-radius:8px;height:40px;padding:0 12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}#etuBtnVoltar:hover{background:rgba(201,162,74,.14)}#etuBtnVoltar svg{width:18px;height:18px}@media(max-width:480px){#etuBtnVoltar span{display:none}#etuBtnVoltar{padding:0 10px}}';
   document.head.appendChild(st);
   var d=document.createElement('div'); d.id='etuVolta'; d.className='hidden'; d.setAttribute('aria-label','Navegação rápida');
-  d.innerHTML='<button type="button" id="etuBtnVoltar" aria-label="Voltar à tela anterior"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M15 5l-7 7 7 7"/></svg>Voltar</button><button type="button" id="etuBtnInicio" aria-label="Ir para a página inicial"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" d="M3 11l9-8 9 8v10h-6v-6H9v6H3z"/></svg>Início</button>';
-  function por(){ document.body.appendChild(d) }
+  d.innerHTML='<button type="button" id="etuBtnVoltar" aria-label="Voltar à tela anterior"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M15 5l-7 7 7 7"/></svg><span>Voltar</span></button><button type="button" id="etuBtnInicio" aria-label="Ir para a página inicial"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" d="M3 11l9-8 9 8v10h-6v-6H9v6H3z"/></svg>Início</button>';
+  function por(){ var w=document.querySelector('header.top .wrap'); if(w) w.insertBefore(d,w.firstChild); else document.body.appendChild(d) }
   if(document.body) por(); else addEventListener('DOMContentLoaded',por);
   d.querySelector('#etuBtnVoltar').onclick=function(){ if(etuNavPassos>0){ history.back() } else { location.hash='inicio' } };
   d.querySelector('#etuBtnInicio').onclick=function(){ location.hash='inicio' };
@@ -34,6 +34,30 @@ function etuMostraVolta(view){ var d=document.getElementById('etuVolta'); if(d) 
     function fecha(){ d.remove(); try{ localStorage.setItem('etu_aviso_seg','1') }catch(_){} }
     d.querySelector('button').onclick=fecha; d.querySelector('a').addEventListener('click',fecha);
     document.body.appendChild(d) }) },6000);
+})();
+
+/* Computador: tamanho das letras e tela cheia */
+(function(){
+  var NIVEIS=[0.9,1,1.1,1.2,1.3], i=1;
+  try{ var g=parseFloat(localStorage.getItem('etu_zoom')); var k=NIVEIS.indexOf(g); if(k>=0) i=k }catch(_){}
+  function aplica(){ var z=NIVEIS[i]; if(window.matchMedia('(min-width:701px)').matches) document.body.style.zoom = z===1?'':String(z); else document.body.style.zoom=''; try{localStorage.setItem('etu_zoom',String(z))}catch(_){} }
+  function monta(){
+    var w=document.querySelector('header.top .wrap'), sino=document.getElementById('sinoBt'); if(!w||document.getElementById('visBar')) return;
+    var b=document.createElement('div'); b.className='vis-bar'; b.id='visBar';
+    b.innerHTML='<button type="button" id="visMenos" title="Diminuir as letras" aria-label="Diminuir as letras">A−</button>'+
+      '<button type="button" id="visMais" title="Aumentar as letras" aria-label="Aumentar as letras">A+</button>'+
+      '<button type="button" id="visCheia" title="Tela cheia" aria-label="Tela cheia"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>Tela cheia</span></button>';
+    w.insertBefore(b, sino||w.querySelector('.menu-btn'));
+    document.getElementById('visMenos').onclick=function(){ if(i>0){i--;aplica()} };
+    document.getElementById('visMais').onclick=function(){ if(i<NIVEIS.length-1){i++;aplica()} };
+    var c=document.getElementById('visCheia');
+    c.onclick=function(){ try{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen() }catch(_){} };
+    document.addEventListener('fullscreenchange',function(){ c.querySelector('span').textContent=document.fullscreenElement?'Sair da tela cheia':'Tela cheia' });
+    if(!document.documentElement.requestFullscreen) c.style.display='none';
+    aplica(); window.addEventListener('resize',aplica);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',monta); else monta();
+  document.addEventListener('click',function(e){ var n=document.getElementById('mainNav'), b=document.getElementById('menuBtn'); if(n&&n.classList.contains('open')&&!n.contains(e.target)&&e.target!==b){ n.classList.remove('open'); b&&b.setAttribute('aria-expanded','false') } });
 })();
 var pedidoInstalar=null;
 var ehSamsung=/SamsungBrowser/i.test(navigator.userAgent), ehAndroid=/Android/i.test(navigator.userAgent), ehIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -1381,7 +1405,7 @@ async function drawContab(){
   $('#cxCsv').onclick=()=>{ const lin=[['Data','Tipo','Categoria','Descrição','Forma','Documento','Valor']].concat(doAno.slice().sort((a,b)=>a.data<b.data?-1:1).map(l=>[fmtDate(l.data),l.tipo==='entrada'?'Entrada':'Saída',l.categoria,l.descricao||'',l.forma||'',l.documento||'',numBR(l.valor).toFixed(2).replace('.',',')]));
     const csv='﻿'+lin.map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(';')).join('\r\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download=`caixa-ETU-${ano}.csv`; a.click() };
   $('#cxImp').onclick=()=>{ const w=window.open('','_blank'); if(!w) return; w.document.write(`<html><head><title>Relatório financeiro — ${nomeMes(mes)}</title><style>body{font-family:Georgia,serif;color:#1b2340;margin:30px}h1{font-size:20px;margin:0}table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px}td,th{border:1px solid #ccc;padding:6px;text-align:left}th{background:#f3eedf}.r{text-align:right}</style></head><body>
-     <h1>Escola Teológica União</h1><div>CNPJ 59.037.548/0001-59 · Cristalina, Goiás</div><h2 style="font-size:16px">Relatório financeiro — ${esc(nomeMes(mes))}</h2>
+     <h1>Escola Teológica União</h1><div>CNPJ 59.037.548/****-** · Cristalina, Goiás</div><h2 style="font-size:16px">Relatório financeiro — ${esc(nomeMes(mes))}</h2>
      <p>Entradas: <b>${brl(ent)}</b> · Saídas: <b>${brl(sai)}</b> · Resultado: <b>${brl(ent-sai)}</b></p>
      <table><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th><th>Doc.</th><th class="r">Valor</th></tr>${doMes.slice().sort((a,b)=>a.data<b.data?-1:1).map(l=>`<tr><td>${fmtDate(l.data)}</td><td>${l.tipo==='entrada'?'Entrada':'Saída'}</td><td>${esc(l.categoria)}</td><td>${esc(l.descricao||'')}</td><td>${esc(l.documento||'')}</td><td class="r">${brl(numBR(l.valor))}</td></tr>`).join('')}</table>
      <p style="margin-top:40px">______________________________<br>Pr. Charlei de Jesus Lima Dias — Diretor Geral</p></body></html>`); w.document.close(); w.print() };
@@ -1397,7 +1421,7 @@ async function drawContab(){
 }
 function recibo(l){ if(!l) return; const w=window.open('','_blank'); if(!w) return; const n=l.documento||('R-'+String(l.id).slice(-6).toUpperCase());
   w.document.write(`<html><head><title>Recibo ${esc(n)}</title><style>body{font-family:Georgia,serif;color:#1b2340;max-width:680px;margin:40px auto;border:2px solid #C9A24A;padding:30px}h1{text-align:center;letter-spacing:.2em;font-size:22px;margin:0}.c{text-align:center}.v{font-size:22px;font-weight:bold}</style></head><body>
-   <div class="c"><b>ESCOLA TEOLÓGICA UNIÃO</b><br>CNPJ 59.037.548/0001-59 · Cristalina, Goiás<br>Curso Livre de Teologia</div><hr>
+   <div class="c"><b>ESCOLA TEOLÓGICA UNIÃO</b><br>CNPJ 59.037.548/****-** · Cristalina, Goiás<br>Curso Livre de Teologia</div><hr>
    <h1>RECIBO</h1><p class="c">Nº ${esc(n)} &nbsp;·&nbsp; <span class="v">${brl(numBR(l.valor))}</span></p>
    <p>Recebemos de <b>${esc((l.descricao||'').split(' — ')[0]||'__________________')}</b> a importância de <b>${brl(numBR(l.valor))}</b>, referente a <b>${esc(l.categoria)}${(l.descricao||'').includes(' — ')?' — '+esc(l.descricao.split(' — ').slice(1).join(' — ')):''}</b>, paga por ${esc(l.forma||'Pix')} em ${fmtDate(l.data)}.</p>
    <p>Para clareza, firmamos o presente recibo.</p><p style="text-align:right">Cristalina, Goiás, ${dataExtenso(new Date(l.data+'T12:00:00'))}.</p>
@@ -1470,7 +1494,7 @@ async function renderDoc(tipo, cid){
         <p style="font-size:19px;line-height:1.7;color:#1B2238;margin:14px auto 0;max-width:780px">Certificamos que <b class="cz" style="font-size:22px;letter-spacing:.06em">${esc(p.nome||'')}</b> concluiu o <b>${esc(c.titulo)}</b>, curso livre de formação bíblica, teológica e ministerial${horas?`, com carga horária de <b>${horas} horas</b>`:''}, cumprindo todas as aulas e avaliações exigidas pela Escola Teológica União.</p>
         <p style="font-size:17px;color:#1B2238;margin:12px 0 0">Cristalina, Goiás, ${dataExtenso()}.</p>
         <div style="display:flex;justify-content:center;margin-top:8px"><div style="text-align:center;width:330px"><img src="${ASSINATURA}" alt="Assinatura do Diretor" style="width:210px;margin-bottom:-8px"><div style="border-top:1px solid #1B2238;padding-top:4px;font-size:14px" class="cz">PR. CHARLEI DE JESUS LIMA DIAS</div><div style="font-size:14px;font-style:italic">Idealizador e Diretor Geral</div></div></div>
-        <p style="font-size:12.5px;color:#4a4f5e;margin:12px 0 0">Registro ${reg} · CNPJ 59.037.548/0001-59 · Curso livre; não equivale a curso de graduação ou pós-graduação.</p>
+        <p style="font-size:12.5px;color:#4a4f5e;margin:12px 0 0">Registro ${reg} · CNPJ 59.037.548/****-** · Curso livre; não equivale a curso de graduação ou pós-graduação.</p>
       </div></div>`;
   } else {
     const val = m?.expira_em ? fmtDate(m.expira_em) : (()=>{const x=new Date();x.setFullYear(x.getFullYear()+1);return x.toLocaleDateString('pt-BR')})();
@@ -1500,7 +1524,7 @@ async function renderDoc(tipo, cid){
           <p style="font-size:12.5px;font-style:italic;margin:10px 0 0">“Procura apresentar-te a Deus aprovado…” — 2 Timóteo 2.15</p>
           <div style="display:flex;gap:24px;margin-top:6px"><div style="flex:1;text-align:center"><div style="height:44px;border-bottom:1px solid #1B2238"></div><div class="cz" style="font-size:9.5px;margin-top:3px">ASSINATURA DO ALUNO</div></div>
           <div style="flex:1;text-align:center"><div style="height:44px;border-bottom:1px solid #1B2238;position:relative"><img src="${ASSINATURA}" alt="Assinatura do Diretor" style="position:absolute;left:50%;bottom:2px;transform:translateX(-50%);width:140px"></div><div class="cz" style="font-size:9.5px;margin-top:3px">PR. CHARLEI DE JESUS LIMA DIAS</div><div style="font-size:10px;font-style:italic">Idealizador e Diretor Geral</div></div></div></div>
-        <div style="position:absolute;left:12px;right:12px;bottom:12px;height:28px;background:#0F1E3D;border-top:2px solid #C9A24A;border-radius:0 0 12px 12px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;color:#C9A24A;font-size:10.5px" class="cz"><span>CNPJ 59.037.548/0001-59</span><span>${reg}</span></div>
+        <div style="position:absolute;left:12px;right:12px;bottom:12px;height:28px;background:#0F1E3D;border-top:2px solid #C9A24A;border-radius:0 0 12px 12px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;color:#C9A24A;font-size:10.5px" class="cz"><span>CNPJ 59.037.548/****-**</span><span>${reg}</span></div>
       </div></div>`;
   }
   { const cod=reg; const urlV=CONFIG.LINK_PUBLICO+'#validar-'+cod; box.insertAdjacentHTML('beforeend',`<div style="display:flex;gap:14px;align-items:center;justify-content:center;margin:14px 0 0;flex-wrap:wrap">${qrSVG(urlV,92)}<p style="font-size:14px;color:#4a4f5e;margin:0;max-width:420px">Código de autenticidade: <b>${esc(cod)}</b><br>Aponte a câmera para o QR Code ou confira em ${esc(CONFIG.LINK_PUBLICO)}#validar</p></div>`); }
