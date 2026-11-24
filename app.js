@@ -1247,7 +1247,7 @@ const sinoKey=()=> 'etu_avisos_vistos_'+(S.user?.id||'visitante');
 function avisos(){ return (S.mural||[]).filter(m=>(m.tipo||'').toLowerCase()==='aviso') }
 function drawSino(){ let v=[]; try{ v=JSON.parse(localStorage.getItem(sinoKey())||'[]') }catch(e){}
   const n=avisos().filter(a=>!v.includes(String(a.id))).length+(S.notificacoes||[]).filter(a=>!a.lida_em).length;
-  const b=$('#sinoN'); b.textContent=n; b.classList.toggle('hidden',!n) }
+  const b=$('#sinoN'); b.textContent=n; b.classList.toggle('hidden',!n); try{ if(navigator.setAppBadge){ n?navigator.setAppBadge(n):navigator.clearAppBadge() } }catch(_){} }
 $('#sinoBt').onclick=async()=>{ const L=avisos(), pessoais=S.notificacoes||[], uid=S.user?.id;
   try{ localStorage.setItem(sinoKey(),JSON.stringify(L.map(a=>String(a.id)))) }catch(e){}
   modal(`<h3>Avisos da escola</h3>${pessoais.map(a=>`<div style="padding:10px 0;border-bottom:1px solid #EFE6D0"><b>${esc(a.titulo)}</b><p>${esc(a.mensagem)}</p><button class="btn btn-gold btn-sm" data-card-download="${esc(a.curso_id)}">Baixar carteirinha PDF</button></div>`).join('')}${L.map(a=>`<div style="padding:10px 0;border-bottom:1px solid #EFE6D0"><b>${esc(a.titulo)}</b><p>${esc(a.texto||'')}</p></div>`).join('')}${!L.length&&!pessoais.length?'<p>Nenhum aviso no momento.</p>':''}<div class="acts"><button class="btn btn-gold" data-close>Fechar</button></div>`);
