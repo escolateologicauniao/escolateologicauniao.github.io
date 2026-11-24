@@ -10,10 +10,23 @@ var etuNavPassos=0;
   if(document.body) por(); else addEventListener('DOMContentLoaded',por);
   d.querySelector('#etuBtnVoltar').onclick=function(){ if(etuNavPassos>0){ history.back() } else { location.hash='inicio' } };
   d.querySelector('#etuBtnInicio').onclick=function(){ location.hash='inicio' };
-  var pilha=[location.hash||'#inicio'];
-  addEventListener('hashchange',function(){ var h=location.hash||'#inicio'; if(pilha.length>1 && pilha[pilha.length-2]===h) pilha.pop(); else if(pilha[pilha.length-1]!==h) pilha.push(h); etuNavPassos=pilha.length-1 });
+  /* Histórico passo a passo: telas e também as abas do Painel da Direção */
+  function chave(){ var t=history.state&&history.state.etuTab; return (location.hash||'#inicio')+'|'+(t||'') }
+  var pilha=[chave()], ultHash=location.hash||'#inicio';
+  function registra(){ var k=chave(); if(pilha.length>1 && pilha[pilha.length-2]===k) pilha.pop(); else if(pilha[pilha.length-1]!==k) pilha.push(k); etuNavPassos=pilha.length-1; etuMostraVolta(window.etuViewAtual) }
+  function aplicaAba(){ var t=history.state&&history.state.etuTab; if(!t) return; var b=document.querySelector('.tabs button[data-tab="'+t+'"]'); if(!b || b.classList.contains('on')) return; window.etuAplicandoAba=true; try{ b.click() }finally{ window.etuAplicandoAba=false } var tb=document.querySelector('.tabs'); if(tb) tb.scrollIntoView({block:'start'}) }
+  addEventListener('hashchange',function(){ ultHash=location.hash||'#inicio'; registra(); setTimeout(aplicaAba,60) });
+  addEventListener('popstate',function(){ if((location.hash||'#inicio')!==ultHash) return; registra(); aplicaAba() });
+  document.addEventListener('click',function(e){
+    var b=e.target.closest&&e.target.closest('.tabs button[data-tab]'); if(!b || window.etuAplicandoAba) return;
+    var t=b.dataset.tab, on=document.querySelector('.tabs button.on'), atual=(history.state&&history.state.etuTab)||(on&&on.dataset.tab);
+    if(t===atual) return;
+    if(!(history.state&&history.state.etuTab)){ try{ history.replaceState({etuTab:atual||'alunos'},'',location.href) }catch(_){} pilha[pilha.length-1]=chave() }
+    try{ history.pushState({etuTab:t},'',location.href) }catch(_){ return }
+    pilha.push(chave()); etuNavPassos=pilha.length-1; etuMostraVolta(window.etuViewAtual);
+  },true);
 })();
-function etuMostraVolta(view){ var d=document.getElementById('etuVolta'); if(d) d.classList.toggle('hidden', !view || view==='inicio') }
+function etuMostraVolta(view){ window.etuViewAtual=view; var d=document.getElementById('etuVolta'); if(d) d.classList.toggle('hidden', (!view || view==='inicio') && !(etuNavPassos>0)) }
 /* Proteção de endereço e aviso de segurança único */
 (function(){
   var OFICIAL='escolateologicauniao.github.io', h=location.hostname;
