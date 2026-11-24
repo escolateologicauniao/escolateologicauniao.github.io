@@ -2329,7 +2329,7 @@ async function drawDivulgacao(){
 
 /* Quadro "Aplicativo" no Menu: versão, atualização, notificações e dicas de configuração */
 (function(){
-  var VERSAO='Versão 22 · 24/11/2026';
+  var VERSAO='Versão 23 · 24/11/2026';
   function estadoNotif(){ if(!('Notification' in window)) return 'não disponíveis neste aparelho'; return Notification.permission==='granted'?'ativadas ✓':(Notification.permission==='denied'?'bloqueadas no celular':'desativadas') }
   function monta(){
     var v=document.querySelector('[data-view="mais"] .wrap'); if(!v || document.getElementById('etuApp')) return;
@@ -2361,4 +2361,67 @@ async function drawDivulgacao(){
   addEventListener('load',function(){ setTimeout(monta,600) });
   /* aviso discreto quando uma versão nova é instalada */
   try{ if('serviceWorker' in navigator){ var tinha=!!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener('controllerchange',function(){ if(!tinha) return; var t=document.createElement('div'); t.textContent='Aplicativo atualizado para a versão mais recente.'; t.style.cssText='position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:#0B1734;color:#F7EFD9;border:1px solid #C9A24A;padding:10px 16px;border-radius:10px;z-index:9999;font-size:15px;box-shadow:0 4px 14px rgba(0,0,0,.3)'; document.body.appendChild(t); setTimeout(function(){ t.remove() },5000) }) } }catch(e){}
+})();
+
+/* Aparência: estilo do brasão e cor do aplicativo (escolha de cada pessoa, guardada no aparelho) */
+(function(){
+  var TEMAS={
+    azul:{n:'Azul-marinho',c:['#0F1E3D','#16294F','#1E3463']},
+    bordo:{n:'Bordô',c:['#4A0F1C','#5E1626','#74202F']},
+    rosa:{n:'Rosa',c:['#6B1F45','#82295A','#99346C']},
+    laranja:{n:'Laranja',c:['#6E2A0C','#863512','#9C431A']},
+    camurca:{n:'Camurça',c:['#4E3A28','#604833','#73583F']},
+    verde:{n:'Verde',c:['#0E3B2E','#14493A','#1B5A47']},
+    roxo:{n:'Roxo',c:['#2E1A4A','#3B2360','#4A2D76']},
+    grafite:{n:'Grafite',c:['#1C1E23','#26292F','#33373F']}
+  };
+  function ler(k,d){ try{ return localStorage.getItem(k)||d }catch(e){ return d } }
+  function grava(k,v){ try{ localStorage.setItem(k,v) }catch(e){} }
+  function aplicaTema(){
+    var t=TEMAS[ler('etu_tema','azul')]||TEMAS.azul, r=document.documentElement.style;
+    r.setProperty('--navy',t.c[0]); r.setProperty('--navy2',t.c[1]); r.setProperty('--navy3',t.c[2]);
+    var m=document.querySelector('meta[name="theme-color"]'); if(m) m.setAttribute('content',t.c[0]);
+  }
+  var SEL='header.top .brand img, img.crest, img.vs-crest, img[data-brasao]';
+  function aplicaBrasao(){
+    var med=ler('etu_brasao','medalhao')==='medalhao';
+    document.querySelectorAll(SEL).forEach(function(i){
+      if(i.closest('#etuAparencia')) return;
+      if(!i.dataset.orig && i.getAttribute('src') && i.getAttribute('src')!=='brasao-redondo.webp') i.dataset.orig=i.getAttribute('src');
+      var alvo=med?'brasao-redondo.webp':(i.dataset.orig||i.getAttribute('src'));
+      if(alvo && i.getAttribute('src')!==alvo) i.setAttribute('src',alvo);
+    });
+  }
+  window.etuAplicaAparencia=function(){ aplicaTema(); aplicaBrasao() };
+  aplicaTema();
+  function painel(){
+    var v=document.querySelector('[data-view="mais"] .wrap'); if(!v || document.getElementById('etuAparencia')) return;
+    var d=document.createElement('div'); d.id='etuAparencia'; d.className='panel'; d.style.cssText='margin-top:18px;color:#1B2238;background:#FFFDF6';
+    var orig=(document.querySelector('img.crest')||{}).dataset; var escudo=(orig&&orig.orig)||'';
+    var bt='';
+    Object.keys(TEMAS).forEach(function(k){ var t=TEMAS[k]; bt+='<button type="button" data-tema="'+k+'" title="'+t.n+'" style="display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;cursor:pointer;font-family:inherit;font-weight:600;font-size:13px;color:#1B2238;padding:4px"><span style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,'+t.c[2]+','+t.c[0]+');border:3px solid #E1D4B2;box-shadow:0 1px 3px rgba(0,0,0,.25)"></span>'+t.n+'</button>' });
+    d.innerHTML='<h3 style="margin:0 0 10px">Aparência</h3>'+
+      '<p style="margin:0 0 8px;font-weight:600;color:#1B2238">Estilo do brasão</p>'+
+      '<div style="display:flex;gap:12px;margin-bottom:16px">'+
+        '<button type="button" data-br="medalhao" style="flex:1;background:#fff;border:2px solid #E1D4B2;border-radius:10px;padding:10px;cursor:pointer;color:#1B2238;font-weight:600;font-family:inherit"><img src="brasao-redondo.webp" alt="" style="width:64px;height:64px;display:block;margin:0 auto 6px">Medalhão</button>'+
+        '<button type="button" data-br="escudo" style="flex:1;background:#fff;border:2px solid #E1D4B2;border-radius:10px;padding:10px;cursor:pointer;color:#1B2238;font-weight:600;font-family:inherit"><img src="'+escudo+'" alt="" style="height:64px;display:block;margin:0 auto 6px">Escudo</button>'+
+      '</div>'+
+      '<p style="margin:0 0 8px;font-weight:600;color:#1B2238">Cor do aplicativo</p>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:6px 10px">'+bt+'</div>'+
+      '<p style="margin:12px 0 0;font-size:14.5px;color:#5b6070">A escolha vale para este aparelho. Os documentos oficiais (certificados e carteirinhas) mantêm sempre o padrão da escola.</p>';
+    v.appendChild(d);
+    function marca(){
+      var tm=ler('etu_tema','azul'), br=ler('etu_brasao','medalhao');
+      d.querySelectorAll('[data-tema] span').forEach(function(s){ s.style.borderColor=(s.parentNode.dataset.tema===tm)?'#C9A24A':'#E1D4B2'; s.style.outline=(s.parentNode.dataset.tema===tm)?'2px solid #8C6A1E':'none' });
+      d.querySelectorAll('[data-br]').forEach(function(b){ b.style.borderColor=(b.dataset.br===br)?'#C9A24A':'#E1D4B2'; b.style.boxShadow=(b.dataset.br===br)?'0 0 0 2px #8C6A1E':'none' });
+    }
+    d.querySelectorAll('[data-tema]').forEach(function(b){ b.onclick=function(){ grava('etu_tema',b.dataset.tema); aplicaTema(); marca() } });
+    d.querySelectorAll('[data-br]').forEach(function(b){ b.onclick=function(){ grava('etu_brasao',b.dataset.br); aplicaBrasao(); marca() } });
+    marca();
+    var app=document.getElementById('etuApp'); if(app) v.appendChild(app);
+  }
+  function tudo(){ aplicaBrasao(); if(location.hash==='#mais') painel() }
+  addEventListener('load',function(){ setTimeout(tudo,300); setTimeout(aplicaBrasao,1500) });
+  addEventListener('hashchange',function(){ setTimeout(tudo,250) });
+  try{ new MutationObserver(function(){ clearTimeout(tudo.t); tudo.t=setTimeout(aplicaBrasao,120) }).observe(document.documentElement,{childList:true,subtree:true}) }catch(e){}
 })();
