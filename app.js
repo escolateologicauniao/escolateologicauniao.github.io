@@ -2372,7 +2372,7 @@ async function drawDivulgacao(){
 
 /* Quadro "Aplicativo" no Menu: versão, atualização, notificações e dicas de configuração */
 (function(){
-  var VERSAO='Versão 32 · 25/11/2026';
+  var VERSAO='Versão 33 · 25/11/2026';
   function estadoNotif(){ if(!('Notification' in window)) return 'não disponíveis neste aparelho'; return Notification.permission==='granted'?'ativadas ✓':(Notification.permission==='denied'?'bloqueadas no celular':'desativadas') }
   function monta(){
     var v=document.querySelector('[data-view="mais"] .wrap'); if(!v || document.getElementById('etuApp')) return;
@@ -3014,3 +3014,26 @@ function etuMensalidades(){
   P.querySelectorAll('[data-mfi]').forEach(b=>b.onclick=()=>dlgAcomp(S.alunos.find(a=>a.id===b.dataset.mfi)));
   P.querySelectorAll('[data-mlib]').forEach(b=>b.onclick=()=>dlgAcesso(S.alunos.find(a=>a.id===b.dataset.mlib)));
 }
+
+/* ---------- Moeda giratória: o selo e o brasão viram de um lado para o outro, com frases acadêmicas ---------- */
+const ETU_LEGENDAS=['Curso Livre de Teologia','Teologia Sistemática · Teologia Bíblica · Apologética','Videoaulas, apostilas e avaliações','“Procura apresentar-te a Deus aprovado” — 2 Timóteo 2.15','Estude a Palavra de Deus onde você estiver','Profundidade acadêmica e fidelidade às Escrituras'];
+function etuMoeda(img,verso,legEl){
+  if(!img||img.dataset.moeda) return; img.dataset.moeda='1';
+  const w=document.createElement('span'); w.className='moeda'; const inn=document.createElement('span'); inn.className='moeda-in';
+  img.parentNode.insertBefore(w,img); w.appendChild(inn); inn.appendChild(img); img.classList.add('moeda-f');
+  const b=document.createElement('span'); b.className='moeda-v'; b.innerHTML=`<img src="${verso}" alt="" aria-hidden="true">`; inn.appendChild(b);
+  const quieto=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches; let i=0, lado=false;
+  if(legEl){ legEl.textContent=ETU_LEGENDAS[0]; legEl.classList.add('moeda-leg') }
+  if(quieto) return;
+  setInterval(()=>{ if(!document.body.contains(w)) return; lado=!lado; inn.classList.toggle('vira',lado);
+    if(legEl){ legEl.classList.add('sai'); setTimeout(()=>{ i=(i+1)%ETU_LEGENDAS.length; legEl.textContent=ETU_LEGENDAS[i]; legEl.classList.remove('sai') },700) } },4800);
+}
+(function(){
+  function liga(){
+    const ab=document.querySelector('.abertura .ab-selo'); if(ab&&!ab.dataset.moeda){ const l=document.createElement('p'); l.className='ab-leg'; const lema=document.querySelector('.abertura .ab-lema'); if(lema) lema.after(l); etuMoeda(ab,'brasao-redondo.webp',l) }
+    const h=document.querySelector('section.hero img.crest'); if(h&&!h.dataset.moeda){ const l=document.createElement('p'); l.className='hero-leg'; etuMoeda(h,'selo-fita.webp',null); h.closest('.moeda').after(l); etuMoeda.legHero=l; let i=0; l.textContent=ETU_LEGENDAS[0]; l.classList.add('moeda-leg');
+      if(!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)) setInterval(()=>{ l.classList.add('sai'); setTimeout(()=>{ i=(i+1)%ETU_LEGENDAS.length; l.textContent=ETU_LEGENDAS[i]; l.classList.remove('sai') },700) },4800) }
+  }
+  if(document.readyState!=='loading') setTimeout(liga,50); else addEventListener('DOMContentLoaded',()=>setTimeout(liga,50));
+  addEventListener('load',()=>setTimeout(liga,300));
+})();
