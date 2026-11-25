@@ -330,6 +330,8 @@ function SupaBackend(){
     async corrigir(aid,resp){ return err(await sb.rpc('corrigir_prova',{p_aula:aid,p_resp:resp})) },
     async tentativas(uid){ return err(await sb.from('tentativas').select('aula_id,nota,aprovado,criado_em').eq('user_id',uid)) },
     async tentativasTodas(){ return err(await sb.from('tentativas').select('user_id,aula_id,nota,aprovado,criado_em')) },
+    async fichaObs(uid){ const r=await sb.from('ficha_obs').select('texto,atualizado_em').eq('user_id',uid).maybeSingle(); if(r.error) throw new Error('Rode o arquivo 09_ficha.sql no Supabase para guardar as anotações.'); return r.data||{texto:''} },
+    async salvarFichaObs(uid,t){ err(await sb.from('ficha_obs').upsert({user_id:uid,texto:t,atualizado_em:new Date().toISOString()},{onConflict:'user_id'})) },
     async todosProgressos(){ return err(await sb.from('progresso').select('user_id,aula_id')) },
     async mural(){ return err(await sb.from('mural').select('*').order('criado_em',{ascending:false})) },
     async saveMural(m){ const row={tipo:m.tipo,titulo:m.titulo,texto:m.texto,video_url:m.video_url};
@@ -468,6 +470,8 @@ function DemoBackend(){
     async tentativas(id){return db.tentativas.filter(t=>t.user_id===id)},
     async tentativasTodas(){return db.tentativas.slice()},
     async todosProgressos(){return db.progresso.slice()},
+    async fichaObs(uid){ try{ return (JSON.parse(localStorage.getItem('etu_ficha_obs')||'{}'))[uid]||{texto:''} }catch(e){ return {texto:''} } },
+    async salvarFichaObs(uid,t){ const o=JSON.parse(localStorage.getItem('etu_ficha_obs')||'{}'); o[uid]={texto:t,atualizado_em:new Date().toISOString()}; localStorage.setItem('etu_ficha_obs',JSON.stringify(o)) },
     async mural(){return db.mural.slice()},
     async registrarDoc(tipo,cid){ const L=JSON.parse(localStorage.getItem('etu_docs')||'[]'); const cod='ETU-'+(S.user.id||'').replace(/-/g,'').slice(0,6).toUpperCase()+'-'+cid.toUpperCase().slice(0,3);
       if(!L.some(x=>x.codigo===cod&&x.tipo===tipo)){ L.push({codigo:cod,tipo,nome:S.profile?.nome||'',curso:curso(cid)?.titulo||cid,emitido_em:today(),situacao:'válido'}); localStorage.setItem('etu_docs',JSON.stringify(L)) } return cod },
@@ -935,7 +939,8 @@ async function renderAdmin(){
   const ativos = alunos.filter(a=>!a.bloqueado && a.matriculas.some(isActive)).length;
   const pend = alunos.filter(a=>!a.matriculas.length).length;
   let pendPag = 0; try{ pendPag = (await API.comprovantes()).filter(c=>c.status==='pendente').length }catch(e){}
-  $('#stats').innerHTML = `<div style="${pendPag?'background:#7A1B2B;border-color:#E4C677':''}"><b>${pendPag}</b><span>Pagamentos a conferir</span></div><div><b>${alunos.length}</b><span>Alunos inscritos</span></div><div><b>${ativos}</b><span>Com acesso liberado</span></div><div><b>${pend}</b><span>Sem matrícula</span></div>`;
+  try{ await etuPainelNumeros(alunos,pendPag) }catch(e){ $('#stats').innerHTML = `<div><b>${alunos.length}</b><span>Alunos inscritos</span></div><div><b>${ativos}</b><span>Com acesso liberado</span></div>` }
+  try{ etuMensalidades() }catch(e){}
   drawAlunos();
   fillSelects(); drawCursosAdm();
   drawAulas();
@@ -952,7 +957,7 @@ function drawAlunos(){
     return `<tr><td><b>${esc(a.nome)}</b>${a.bloqueado?' <span class="pill off">SUSPENSO</span>':''}<br><span style="font-size:14px;color:var(--muted)">Inscrito em ${fmtDate((a.criado_em||'').slice(0,10))}${a.interesse?' · Interesse: '+esc(curso(a.interesse)?.titulo||a.interesse):''}</span></td>
       <td>${esc(a.email||'')}<br>${esc(a.telefone||'')}</td><td><div class="chips">${chips}</div></td>
       <td style="min-width:120px">${a.matriculas.map(m=>{const l=lessonsOf(m.curso_id);const d=l.filter(x=>(S.allProg||[]).some(p=>p.user_id===a.id&&p.aula_id===x.id)).length;return l.length?`<div style="font-size:14px">${esc((curso(m.curso_id)?.titulo||'').replace('Curso ','').replace(' de Teologia',''))}: ${Math.round(d*100/l.length)}%</div>`:''}).join('')||'—'}</td>
-      <td><div class="chips"><button class="btn btn-gold btn-sm" data-acomp="${a.id}">Acompanhamento</button><button class="btn btn-navy btn-sm" data-lib="${a.id}">Liberar / editar acesso</button>
+      <td><div class="chips"><button class="btn btn-gold btn-sm" data-acomp="${a.id}">Ficha do aluno</button><button class="btn btn-navy btn-sm" data-lib="${a.id}">Liberar / editar acesso</button>
       <button class="btn btn-line btn-sm" data-card-admin="${a.id}">Enviar carteirinha PDF</button>
       <button class="btn btn-line btn-sm" data-reset="${a.id}">Enviar nova senha</button>
       <button class="btn btn-red btn-sm" data-bloq="${a.id}">${a.bloqueado?'Reativar':'Suspender'}</button></div></td></tr>`;
@@ -983,10 +988,27 @@ async function dlgAcomp(a){
       <div class="progress"><i style="width:${l.length?Math.round(d*100/l.length):0}%"></i></div>
       <div class="tbl-wrap" style="margin-top:10px"><table><thead><tr><th>Aula</th><th>Situação</th><th>Melhor nota</th><th>Tentativas</th></tr></thead><tbody>${linhas||'<tr><td colspan="4">Sem aulas.</td></tr>'}</tbody></table></div>
       ${l.length && d===l.length?`<div class="done-banner" style="margin-top:10px">Curso concluído. A carteirinha é preparada e enviada separadamente pela Direção.</div>`:''}</div>`}).join('');
-  modal(`<h3>Acompanhamento de ${esc(a.nome)}</h3><p style="margin:6px 0 0;font-size:16px">${esc(a.email||'')}${a.telefone?' · '+esc(a.telefone):''}</p>
+  let comps=[]; try{ comps=(S.pags||await API.comprovantes()).filter(c=>c.user_id===a.id) }catch(e){}
+  let ats=[]; try{ const tel=String(a.telefone||'').replace(/\D/g,'').slice(-8); ats=(await API.atendimentos()).filter(t=>{ const c=String(t.contato||'')+' '+String(t.nome||''); return (a.email&&c.toLowerCase().includes(a.email.toLowerCase()))||(tel.length>=8&&c.replace(/\D/g,'').includes(tel)) }) }catch(e){}
+  let obs={texto:''}, obsErr=''; try{ obs=await API.fichaObs(a.id) }catch(e){ obsErr=e.message }
+  const nreg=etuNumMatricula(a), ultimo=tent.concat().sort((x,y)=>x.criado_em<y.criado_em?1:-1)[0];
+  const SP={pendente:'A conferir',aprovado:'Aprovado',recusado:'Recusado'};
+  modal(`<div class="fi-h"><div><h3 style="margin:0">Ficha do aluno</h3><p style="margin:4px 0 0;font-size:19px"><b>${esc(a.nome||'')}</b>${a.bloqueado?' <span class="pill off">SUSPENSO</span>':''}</p></div><div class="fi-n"><small>MATRÍCULA</small>${esc(nreg)}</div></div>
+    <div class="fi-g"><div><small>E-MAIL</small>${esc(a.email||'—')}</div><div><small>WHATSAPP</small>${esc(a.telefone||'—')}</div><div><small>INSCRITO EM</small>${fmtDate((a.criado_em||'').slice(0,10))}</div><div><small>INTERESSE</small>${esc(a.interesse||'—')}</div><div><small>ÚLTIMA PROVA</small>${ultimo?fmtDate(ultimo.criado_em.slice(0,10))+' · '+ultimo.nota+'%':'—'}</div><div><small>AULAS CONCLUÍDAS</small>${prog.length}</div></div>
+    <div class="fi-sec">Matrículas</div>${a.matriculas.length?a.matriculas.map(m=>`<div style="font-size:15.5px;margin:4px 0">• <b>${esc(curso(m.curso_id)?.titulo||m.curso_id)}</b> — ${isActive(m)?'<span class="pill ok">ATIVA</span>':m.status==='bloqueado'?'<span class="pill off">SUSPENSA</span>':'<span class="pill lock">VENCIDA</span>'}${m.expira_em?' · vence em '+fmtDate(m.expira_em):' · sem validade'}</div>`).join(''):'<p style="margin:4px 0;color:var(--muted)">Sem matrícula.</p>'}
+    <div class="fi-sec">Cursos, aulas e notas</div>
     ${blocos || '<p class="msg info">Este aluno ainda não iniciou nenhum curso.</p>'}
+    <div class="fi-sec">Pagamentos</div>${comps.length?`<div class="tbl-wrap"><table><thead><tr><th>Data</th><th>Curso</th><th>Valor</th><th>Situação</th></tr></thead><tbody>${comps.map(c=>`<tr><td>${fmtDate((c.criado_em||'').slice(0,10))}</td><td>${esc(curso(c.curso_id)?.titulo||c.curso_id||'')}</td><td>${c.valor?brl(numBR(c.valor)):'—'}</td><td>${esc(SP[c.status]||c.status||'')}</td></tr>`).join('')}</tbody></table></div>`:'<p style="margin:4px 0;color:var(--muted)">Nenhum comprovante enviado.</p>'}
+    <div class="fi-sec">Atendimentos</div>${ats.length?ats.slice(0,8).map(t=>`<div style="font-size:15px;margin:6px 0;padding:8px;background:#FBF7EC;border-radius:8px"><b>${fmtDate((t.criado_em||'').slice(0,10))}</b> — ${esc(String(t.mensagem||'').slice(0,220))}</div>`).join(''):'<p style="margin:4px 0;color:var(--muted)">Nenhum atendimento registrado.</p>'}
+    <div class="fi-sec">Anotações da Direção</div>${obsErr?`<p class="msg info">${esc(obsErr)}</p>`:''}
+    <textarea id="fiObs" rows="4" placeholder="Ex.: pediu para pagar no dia 10; é obreiro na igreja tal; prefere contato à noite.">${esc(obs.texto||'')}</textarea>
+    <div class="msg hidden" id="mFi"></div><div class="res"><button class="btn btn-navy btn-sm" id="fiSalvar" type="button">Salvar anotação</button><button class="btn btn-line btn-sm" id="fiImp" type="button">Imprimir a ficha</button></div>
     <div class="acts">${a.telefone?`<a class="btn btn-line" href="https://wa.me/55${esc((a.telefone||'').replace(/\D/g,'').replace(/^55/,''))}" target="_blank" rel="noopener">WhatsApp do aluno</a>`:''}<button class="btn btn-gold" data-close>Fechar</button></div>`,
-    r=>{ r.querySelector('.box').style.maxWidth='760px' });
+    r=>{ r.querySelector('.box').style.maxWidth='760px';
+      r.querySelector('#fiSalvar').onclick=async()=>{ try{ await API.salvarFichaObs(a.id,r.querySelector('#fiObs').value); show(r.querySelector('#mFi'),'Anotação salva.','ok') }catch(e){ show(r.querySelector('#mFi'),e.message,'err') } };
+      r.querySelector('#fiImp').onclick=()=>{ const w=window.open('','_blank'); if(!w) return; const c=r.querySelector('.box').cloneNode(true); c.querySelectorAll('button,.acts,.res,.msg').forEach(x=>x.remove()); const ta=c.querySelector('textarea'); if(ta){ const p2=document.createElement('p'); p2.textContent=r.querySelector('#fiObs').value||'—'; ta.replaceWith(p2) }
+        w.document.write(`<html><head><title>Ficha — ${esc(a.nome||'')}</title><style>body{font-family:Georgia,serif;color:#1b2340;margin:26px;font-size:14px}h3{margin:0}.fi-h{display:flex;justify-content:space-between;border-bottom:2px solid #C9A24A;padding-bottom:8px}.fi-n{border:1.5px solid #C9A24A;padding:6px 10px;font-weight:700}.fi-g{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0}.fi-g div{border:1px solid #ddd;padding:5px}.fi-g small{display:block;color:#8C6A1E;font-size:11px}.fi-sec{font-weight:700;margin:14px 0 4px;border-bottom:1px solid #C9A24A}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px;text-align:left}.progress{display:none}</style></head><body><p style="margin:0 0 8px"><b>ESCOLA TEOLÓGICA UNIÃO</b> · Curso Livre de Teologia · ficha de uso interno da Direção</p>${c.innerHTML}<p style="margin-top:18px;font-size:12px">Impresso em ${dataExtenso(new Date())}. Documento interno; contém dados pessoais protegidos pela LGPD.</p></body></html>`); w.document.close(); w.print() };
+    });
 }
 function dlgAcesso(a){
   const plus = d=>{const x=new Date();x.setDate(x.getDate()+d);return x.toISOString().slice(0,10)};
@@ -1417,19 +1439,23 @@ async function drawContab(){
   const ent=soma(doMes,'entrada'), sai=soma(doMes,'saida'), entA=soma(doAno,'entrada'), saiA=soma(doAno,'saida');
   const refs=new Set(L.map(l=>l.ref).filter(Boolean));
   const naoLanc=C.filter(c=>!refs.has('comp:'+c.id));
+  const autoL=naoLanc.filter(c=>numBR(c.valor)>0 && !(CX.autoFeitos||(CX.autoFeitos=new Set())).has(c.id));
+  if(autoL.length){ let n=0; for(const c of autoL){ CX.autoFeitos.add(c.id); const a=(S.alunos||[]).find(x=>x.id===c.user_id)||{};
+      try{ await API.salvarLancamento({tipo:'entrada',data:(c.criado_em||today()).slice(0,10),categoria:'Mensalidades',descricao:`${a.nome||'Aluno'} — ${curso(c.curso_id)?.titulo||''}`,valor:numBR(c.valor),forma:'Pix',documento:'Comprovante na plataforma',ref:'comp:'+c.id}); n++ }catch(e){} }
+    if(n){ CX.autoMsg=n+(n>1?' pagamentos aprovados foram lançados':' pagamento aprovado foi lançado')+' automaticamente no caixa, com recibo.'; return drawContab() } }
   const alunos=(S.alunos||[]).filter(a=>!a.is_admin);
   const hoje=today(), em7=addDias(hoje,7);
   const venc=[]; alunos.forEach(a=>(a.matriculas||[]).forEach(m=>{ if(m.status==='ativo' && m.expira_em){ if(m.expira_em<hoje) venc.push({a,m,s:'vencida'}); else if(m.expira_em<=em7) venc.push({a,m,s:'vence'}) } }));
   const porCat={}; doMes.forEach(l=>{ const k=(l.tipo==='entrada'?'Entrada · ':'Saída · ')+l.categoria; porCat[k]=(porCat[k]||0)+numBR(l.valor) });
   const meses=[...Array(12)].map((_,i)=>{ const k=ano+'-'+String(i+1).padStart(2,'0'); const x=L.filter(l=>(l.data||'').startsWith(k)); return [k,soma(x,'entrada'),soma(x,'saida')] });
   const nomeMes=k=>MESES[+k.slice(5,7)-1]+' de '+k.slice(0,4);
-  P.innerHTML=`<h3>Contabilidade e finanças da escola</h3>
+  P.innerHTML=`<h3>Contabilidade e finanças da escola</h3>${CX.autoMsg?`<div class="msg ok" style="margin:8px 0">${esc(CX.autoMsg)}</div>`:''}
    <p style="margin:0 0 6px;color:var(--muted);font-size:16px">O caixa da Escola Teológica União: tudo o que entra e sai, organizado por mês e por categoria, com recibos, relatórios e a planilha para entregar ao contador. Somente a Direção vê esta área.</p>
    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end"><div><label for="cxMes">Mês</label><input id="cxMes" type="month" value="${mes}"></div>
     <button class="btn btn-line btn-sm" id="cxCsv" type="button">Baixar planilha do ano</button><button class="btn btn-line btn-sm" id="cxImp" type="button">Imprimir relatório do mês</button></div>
    <div class="cx-cards"><div class="pos"><b>${brl(ent)}</b><span>Entradas em ${esc(nomeMes(mes))}</span></div><div class="neg"><b>${brl(sai)}</b><span>Saídas no mês</span></div>
     <div class="${ent-sai<0?'neg':'pos'}"><b>${brl(ent-sai)}</b><span>Resultado do mês</span></div><div class="${entA-saiA<0?'neg':'pos'}"><b>${brl(entA-saiA)}</b><span>Resultado de ${ano}</span></div></div>
-   ${naoLanc.length?`<div class="cx-sec"><h4>Pagamentos confirmados na plataforma ainda fora do caixa</h4><div class="tbl-wrap"><table><thead><tr><th>Aluno</th><th>Curso</th><th>Valor</th><th>Data</th><th></th></tr></thead><tbody>${naoLanc.map(c=>{ const a=alunos.find(x=>x.id===c.user_id)||{}; return `<tr><td>${esc(a.nome||'Aluno')}</td><td>${esc(curso(c.curso_id)?.titulo||c.curso_id)}</td><td>${c.valor?brl(numBR(c.valor)):'—'}</td><td>${fmtDate((c.criado_em||'').slice(0,10))}</td><td><button class="btn btn-navy btn-sm" data-lancar="${esc(c.id)}" type="button">Lançar no caixa</button></td></tr>`}).join('')}</tbody></table></div></div>`:''}
+   ${naoLanc.length?`<div class="cx-sec"><h4>Pagamentos confirmados sem valor informado</h4><p style="margin:0 0 8px;font-size:15px">Os pagamentos aprovados com valor entram no caixa sozinhos. Estes vieram sem valor: confira e lance.</p><div class="tbl-wrap"><table><thead><tr><th>Aluno</th><th>Curso</th><th>Valor</th><th>Data</th><th></th></tr></thead><tbody>${naoLanc.map(c=>{ const a=alunos.find(x=>x.id===c.user_id)||{}; return `<tr><td>${esc(a.nome||'Aluno')}</td><td>${esc(curso(c.curso_id)?.titulo||c.curso_id)}</td><td>${c.valor?brl(numBR(c.valor)):'—'}</td><td>${fmtDate((c.criado_em||'').slice(0,10))}</td><td><button class="btn btn-navy btn-sm" data-lancar="${esc(c.id)}" type="button">Lançar no caixa</button></td></tr>`}).join('')}</tbody></table></div></div>`:''}
    <div class="cx-sec"><h4>Novo lançamento</h4>
     <div class="grid3"><div><label for="cxTipo">Tipo</label><select id="cxTipo"><option value="entrada">Entrada (dinheiro que entrou)</option><option value="saida">Saída (dinheiro que saiu)</option></select></div>
      <div><label for="cxData">Data</label><input id="cxData" type="date" value="${mes===hoje.slice(0,7)?hoje:mes+'-01'}"></div>
@@ -2346,7 +2372,7 @@ async function drawDivulgacao(){
 
 /* Quadro "Aplicativo" no Menu: versão, atualização, notificações e dicas de configuração */
 (function(){
-  var VERSAO='Versão 30 · 25/11/2026';
+  var VERSAO='Versão 32 · 25/11/2026';
   function estadoNotif(){ if(!('Notification' in window)) return 'não disponíveis neste aparelho'; return Notification.permission==='granted'?'ativadas ✓':(Notification.permission==='denied'?'bloqueadas no celular':'desativadas') }
   function monta(){
     var v=document.querySelector('[data-view="mais"] .wrap'); if(!v || document.getElementById('etuApp')) return;
@@ -2468,33 +2494,42 @@ function etuFechKey(m){ return 'etu_fech_'+m }
 function etuMesAnterior(){ const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-1); return d.toISOString().slice(0,7) }
 function etuFechStatus(m){ try{ return JSON.parse(localStorage.getItem(etuFechKey(m))||'{}') }catch(e){ return {} } }
 function etuFechGrava(m,o){ try{ localStorage.setItem(etuFechKey(m),JSON.stringify(Object.assign(etuFechStatus(m),o))) }catch(e){} }
-function etuPendencias(){
-  const hoje=new Date(), dia=hoje.getDate(), ant=etuMesAnterior(), st=etuFechStatus(ant), nm=MESES[+ant.slice(5)-1]+' de '+ant.slice(0,4), out=[];
-  if(!st.fechado) out.push({t:'Fechar o caixa de '+nm+' e gerar o Relatório Mensal de Receitas Brutas',p:'até o dia 20'});
-  if(!st.das) out.push({t:'Pagar o DAS do MEI referente a '+nm,p:'vence no dia 20'+(dia>20?' (atrasado: pague com juros no app MEI)':'')});
+function etuDasPago(L,m){ const x=(L||[]).find(l=>l.tipo==='saida'&&(l.documento||'').trim()==='DAS '+m); if(x) return fmtDate(x.data); return etuFechStatus(m).das||'' }
+function etuPendencias(L){
+  L=L||window.etuCxL||[]; const hoje=new Date(), dia=hoje.getDate(), ant=etuMesAnterior(), nm=MESES[+ant.slice(5)-1]+' de '+ant.slice(0,4), out=[];
+  if(!etuDasPago(L,ant)) out.push({t:'Pagar e registrar o DAS do MEI de '+nm,p:dia<=20?'vence no dia 20; faltam '+(20-dia)+' dia(s)':'atrasado: emita a guia nova, com juros, no aplicativo MEI'});
   if(hoje.getMonth()<=4 && !etuFechStatus(String(hoje.getFullYear())).dasn) out.push({t:'Enviar a Declaração Anual do MEI (DASN-SIMEI) do ano de '+(hoje.getFullYear()-1),p:'até 31 de maio'});
   return out;
 }
 function etuFechamento(P,L){
-  const ant=etuMesAnterior(), nm=k=>MESES[+k.slice(5)-1]+' de '+k.slice(0,4), st=etuFechStatus(ant), pend=etuPendencias(), ano=String(new Date().getFullYear());
+  window.etuCxL=L;
+  const ant=etuMesAnterior(), nm=k=>MESES[+k.slice(5)-1]+' de '+k.slice(0,4), st=etuFechStatus(ant), pend=etuPendencias(L), ano=String(new Date().getFullYear());
   const d=document.createElement('div'); d.className='cx-sec'; d.id='etuContador'; d.style.cssText='border:2px solid #C9A24A;border-radius:12px;padding:16px 18px;background:#FFFDF6;color:#1B2238;margin-bottom:18px';
   d.innerHTML=`<h4 style="margin:0 0 6px">Contador da Direção</h4>
    <p style="margin:0 0 10px;font-size:15.5px;color:#4a4f5e">Lembretes das obrigações do MEI e fechamento mensal do caixa. Os relatórios saem prontos para salvar em PDF (no celular: Compartilhar → Imprimir → Salvar como PDF).</p>
-   ${pend.length?`<div style="background:#FBEFEF;border:1px solid #E0B4B4;border-radius:10px;padding:10px 14px;margin-bottom:12px"><b style="color:#7A1B2B">Pendências agora</b><ul style="margin:6px 0 0;padding-left:20px">${pend.map(x=>`<li>${esc(x.t)} <i>(${esc(x.p)})</i></li>`).join('')}</ul></div>`:`<div style="background:#EAF5EC;border:1px solid #A7D3B1;border-radius:10px;padding:10px 14px;margin-bottom:12px"><b style="color:#1E5E33">Tudo em dia.</b> O mês de ${esc(nm(ant))} está fechado e o DAS está marcado como pago.</div>`}
+   ${pend.length?`<div style="background:#FBEFEF;border:1px solid #E0B4B4;border-radius:10px;padding:10px 14px;margin-bottom:12px"><b style="color:#7A1B2B">Pendências agora</b><ul style="margin:6px 0 0;padding-left:20px">${pend.map(x=>`<li>${esc(x.t)} <i>(${esc(x.p)})</i></li>`).join('')}</ul></div>`:`<div style="background:#EAF5EC;border:1px solid #A7D3B1;border-radius:10px;padding:10px 14px;margin-bottom:12px"><b style="color:#1E5E33">Tudo em dia.</b> O relatório de ${esc(nm(ant))} está pronto e o DAS está registrado como pago.</div>`}
    <div style="display:grid;gap:10px">
-    <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff"><b>1. Fechamento de ${esc(nm(ant))}</b> — ${st.fechado?`<span class="pill on">Fechado em ${esc(st.fechado)}</span>`:'<span class="pill lock">Pendente</span>'}
-      <p style="margin:6px 0 8px;font-size:15px">Confira os lançamentos do mês, depois gere o relatório. Ele soma as entradas do caixa e monta o Relatório Mensal de Receitas Brutas no modelo do MEI, que deve ser guardado por 5 anos junto com os comprovantes.</p>
-      <div class="res"><button class="btn btn-gold btn-sm" type="button" id="fechGerar">Gerar relatório e fechar o mês</button>${st.fechado?'<button class="btn btn-line btn-sm" type="button" id="fechReabrir">Reabrir o mês</button>':''}</div></div>
-    <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff"><b>2. DAS do MEI de ${esc(nm(ant))}</b> — ${st.das?`<span class="pill on">Pago (${esc(st.das)})</span>`:'<span class="pill lock">A pagar até o dia 20</span>'}
-      <p style="margin:6px 0 8px;font-size:15px">Emita a guia no aplicativo MEI ou no Portal do Empreendedor (gov.br/mei) e pague até o dia 20, mesmo sem faturamento no mês. Depois de pagar, registre a saída no caixa (categoria Impostos) e marque aqui.</p>
-      <div class="res"><button class="btn btn-line btn-sm" type="button" id="fechDas">${st.das?'Desmarcar':'Marcar DAS como pago'}</button><a class="btn btn-line btn-sm" href="https://www.gov.br/empresas-e-negocios/pt-br/empreendedor" target="_blank" rel="noopener">Abrir o Portal do Empreendedor</a></div></div>
+    <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff"><b>1. Relatório Mensal de ${esc(nm(ant))}</b> — <span class="pill on">Pronto automaticamente</span>
+      <p style="margin:6px 0 8px;font-size:15px">A plataforma monta sozinha o Relatório Mensal das Receitas Brutas com as entradas do caixa. Receita de ${esc(nm(ant))}: <b>${brl(L.filter(l=>l.tipo==='entrada'&&(l.data||'').startsWith(ant)).reduce((x,l)=>x+numBR(l.valor),0))}</b>${L.some(l=>l.tipo==='entrada'&&(l.data||'').startsWith(ant))?'':' (mês sem vendas: o relatório sai com R$ 0,00, e isso está correto)'}. Salve o PDF e guarde por 5 anos.</p>
+      <div class="res"><button class="btn btn-gold btn-sm" type="button" id="fechGerar">Salvar o relatório em PDF</button></div></div>
+    <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff"><b>2. DAS do MEI de ${esc(nm(ant))}</b> — ${etuDasPago(L,ant)?`<span class="pill on">Pago (${esc(etuDasPago(L,ant))})</span>`:`<span class="pill lock">${new Date().getDate()>20?'Atrasado':'A pagar até o dia 20'}</span>`}
+      ${etuDasPago(L,ant)?'<p style="margin:6px 0 0;font-size:15px">Pagamento registrado no caixa. O comprovante deve ser guardado.</p>':`<p style="margin:6px 0 8px;font-size:15px">O DAS é pago todo mês, mesmo sem vendas. Emita a guia no aplicativo MEI ou no Portal do Empreendedor${new Date().getDate()>20?' (como venceu, gere a guia nova: ela já vem com juros e multa)':''}. Depois de pagar, informe o valor abaixo: a plataforma lança a saída no caixa e dá baixa na pendência num toque só.</p>
+      <div class="grid2"><div><label for="dasValor">Valor pago (R$)</label><input id="dasValor" inputmode="decimal" placeholder="0,00"></div><div><label for="dasData">Data do pagamento</label><input id="dasData" type="date" value="${today()}"></div></div>
+      <div class="msg hidden" id="mDas"></div>
+      <div class="res"><button class="btn btn-gold btn-sm" type="button" id="dasReg">Registrar pagamento do DAS</button><a class="btn btn-line btn-sm" href="https://www.gov.br/empresas-e-negocios/pt-br/empreendedor" target="_blank" rel="noopener">Abrir o Portal do Empreendedor</a></div>
+      <p style="margin:8px 0 0;font-size:14px;color:#5b6070">Dica: no aplicativo MEI dá para cadastrar o débito automático do DAS.</p>`}</div>
+    <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff"><b>Quadro do ano de ${ano}</b>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+      ${[...Array(new Date().getMonth()+1)].map((_,i)=>{ const k=ano+'-'+String(i+1).padStart(2,'0'), rec=L.filter(l=>l.tipo==='entrada'&&(l.data||'').startsWith(k)).reduce((x,l)=>x+numBR(l.valor),0), pg=etuDasPago(L,k), atual=i===new Date().getMonth();
+        return `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;border:1px solid #eee;border-radius:8px;padding:8px 10px;font-size:15px"><b style="flex:1 1 90px">${MESES[i]}</b><span style="flex:0 0 auto">${brl(rec)}</span><span style="flex:1 1 100%;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${atual?'<span style="color:#5b6070;font-size:14px">DAS vence no dia 20 do mês seguinte</span>':pg?'<span style="color:#1F6B45;font-weight:700">✓ DAS pago</span>':`<button class="btn btn-line btn-sm" type="button" data-dasm="${k}">Registrar DAS</button>`}<button class="btn btn-line btn-sm" type="button" data-relm="${k}">Relatório PDF</button></span></div>` }).join('')}
+      </div><p style="margin:8px 0 0;font-size:14px;color:#5b6070">Os pagamentos do DAS ficam guardados no caixa da escola e aparecem em qualquer aparelho em que a Direção entrar.</p></div>
     <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff"><b>3. Declaração anual (DASN-SIMEI)</b> — ${etuFechStatus(ano).dasn?`<span class="pill on">Enviada em ${esc(etuFechStatus(ano).dasn)}</span>`:'<span class="pill lock">Até 31 de maio</span>'}
       <p style="margin:6px 0 8px;font-size:15px">Uma vez por ano, até 31 de maio, informe o faturamento total do ano anterior. O resumo abaixo soma os 12 meses do caixa para facilitar o preenchimento.</p>
       <div class="res"><button class="btn btn-line btn-sm" type="button" id="fechAno">Gerar resumo do ano anterior</button><button class="btn btn-line btn-sm" type="button" id="fechDasn">${etuFechStatus(ano).dasn?'Desmarcar':'Marcar declaração como enviada'}</button></div></div>
     <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff"><b>4. Nota fiscal</b>
       <p style="margin:6px 0 0;font-size:15px">O MEI emite nota fiscal de serviço quando o pagador é empresa (CNPJ) ou quando o aluno pedir. Ao lançar uma entrada com nota, escreva no campo Documento o número começando por “NF” (ex.: NF 123); o relatório separa sozinho as receitas com e sem nota.</p></div>
    </div>
-   <p style="margin:12px 0 0;font-size:14px;color:#5b6070">O fechamento fica marcado neste aparelho. Os prazos seguem as regras atuais do MEI; confirme sempre no Portal do Empreendedor ou com um contador.</p>`;
+   <p style="margin:12px 0 0;font-size:14px;color:#5b6070">Os pagamentos do DAS ficam registrados no caixa da escola; a marcação da declaração anual fica neste aparelho. Os prazos seguem as regras atuais do MEI; confirme sempre no Portal do Empreendedor ou com um contador.</p>`;
   P.insertBefore(d,P.children[2]||null);
   const ent=(arr)=>arr.filter(l=>l.tipo==='entrada'), sum=a=>a.reduce((x,l)=>x+numBR(l.valor),0), comNF=l=>/^\s*NF/i.test(l.documento||'');
   function relMes(m){
@@ -2516,9 +2551,12 @@ function etuFechamento(P,L){
      <p style="font-size:12px;color:#555;margin-top:20px">Guardar este relatório por 5 anos, com os comprovantes de recebimento e as notas fiscais emitidas e recebidas.</p></body></html>`);
     w.document.close(); w.print(); return true;
   }
-  $('#fechGerar').onclick=()=>{ if(relMes(ant)){ etuFechGrava(ant,{fechado:new Date().toLocaleDateString('pt-BR')}); setTimeout(drawContab,800) } };
-  const re=$('#fechReabrir'); if(re) re.onclick=()=>{ etuFechGrava(ant,{fechado:''}); drawContab() };
-  $('#fechDas').onclick=()=>{ etuFechGrava(ant,{das:st.das?'':new Date().toLocaleDateString('pt-BR')}); drawContab() };
+  $('#fechGerar').onclick=()=>{ if(relMes(ant)) etuFechGrava(ant,{fechado:new Date().toLocaleDateString('pt-BR')}) };
+  d.querySelectorAll('[data-relm]').forEach(b=>b.onclick=()=>relMes(b.dataset.relm));
+  async function regDas(m,valor,data,msg){ const v=numBR(valor); if(!(v>0)){ if(msg) show(msg,'Digite o valor pago, como está no comprovante.','err'); return }
+    try{ await API.salvarLancamento({tipo:'saida',data:data||today(),categoria:'Impostos e taxas',descricao:'DAS do MEI — competência '+nm(m),valor:v,forma:'Pix',documento:'DAS '+m}); etuFechGrava(m,{das:fmtDate(data||today())}); drawContab() }catch(e){ if(msg) show(msg,e.message,'err'); else alert(e.message) } }
+  const dr=$('#dasReg'); if(dr) dr.onclick=()=>regDas(ant,$('#dasValor').value,$('#dasData').value,$('#mDas'));
+  d.querySelectorAll('[data-dasm]').forEach(b=>b.onclick=()=>{ const v=prompt('Valor pago do DAS de '+nm(b.dataset.dasm)+' (R$):'); if(v===null) return; const dt=prompt('Data do pagamento (dia/mês/ano):',new Date().toLocaleDateString('pt-BR')); if(dt===null) return; const q=dt.split('/'); const iso=q.length===3?q[2]+'-'+q[1].padStart(2,'0')+'-'+q[0].padStart(2,'0'):today(); regDas(b.dataset.dasm,v,iso,null) });
   $('#fechDasn').onclick=()=>{ const s2=etuFechStatus(ano); etuFechGrava(ano,{dasn:s2.dasn?'':new Date().toLocaleDateString('pt-BR')}); drawContab() };
   $('#fechAno').onclick=()=>{ const a=String(+ano-1); const E=ent(L.filter(l=>(l.data||'').startsWith(a)));
     const w=window.open('','_blank'); if(!w) return;
@@ -2534,6 +2572,7 @@ function etuFechamento(P,L){
 (function(){
   function avisa(){
     if(!(S.profile&&S.profile.is_admin)) return; if(location.hash!=='#admin') return;
+    if(!window.etuCxL){ API.lancamentos().then(L=>{ window.etuCxL=L||[]; avisa() }).catch(()=>{}); return }
     const pend=etuPendencias(), v=document.querySelector('[data-view="admin"] .wrap'); if(!v) return;
     let b=document.getElementById('etuAvisoCont'); if(!pend.length){ if(b) b.remove(); return }
     if(!b){ b=document.createElement('div'); b.id='etuAvisoCont'; b.style.cssText='background:#FFF7E3;border:1px solid #C9A24A;border-left:5px solid #C9A24A;border-radius:10px;padding:12px 16px;margin:14px 0;color:#1B2238'; v.insertBefore(b,v.firstChild) }
@@ -2925,3 +2964,53 @@ addEventListener('load',()=>setTimeout(etuVivoRota,1600));
   d.querySelector('.ab-entrar').onclick=fecha;
   document.body.appendChild(d); setTimeout(fecha,12000);
 })();
+
+/* ---------- Direção: número de matrícula, painel de números e controle de mensalidades ---------- */
+function etuNumMatricula(a){
+  const l=(S.alunos||[]).filter(x=>!x.is_admin).slice().sort((x,y)=>String(x.criado_em||'')<String(y.criado_em||'')?-1:1);
+  const ano=String(a.criado_em||today()).slice(0,4), mesmos=l.filter(x=>String(x.criado_em||'').slice(0,4)===ano);
+  const n=mesmos.findIndex(x=>x.id===a.id)+1; return 'ETU-'+ano+'-'+String(n||0).padStart(4,'0');
+}
+function etuSituacaoMens(m){
+  if(!m||m.status==='bloqueado') return 'suspensa'; if(m.status!=='ativo') return 'outra'; if(!m.expira_em) return 'semvalidade';
+  const h=today(); if(m.expira_em<h) return vigente(m.expira_em)?'atrasada':'suspensa'; if(m.expira_em<=addDias(h,7)) return 'vence'; return 'emdia';
+}
+async function etuPainelNumeros(alunos,pendPag){
+  const mes=today().slice(0,7);
+  let L=[]; try{ L=await API.lancamentos() }catch(e){} window.etuCxL=L;
+  let T=[]; try{ T=await API.tentativasTodas() }catch(e){}
+  const novos=alunos.filter(a=>String(a.criado_em||'').startsWith(mes)).length;
+  const ativos=alunos.filter(a=>!a.bloqueado&&a.matriculas.some(isActive)).length;
+  const rec=L.filter(l=>l.tipo==='entrada'&&(l.data||'').startsWith(mes)).reduce((x,l)=>x+numBR(l.valor),0);
+  let atras=0, vence=0; alunos.forEach(a=>a.matriculas.forEach(m=>{ const s2=etuSituacaoMens(m); if(s2==='atrasada'||s2==='suspensa'&&m.status==='ativo') atras++; if(s2==='vence') vence++ }));
+  const provas=T.filter(t=>String(t.criado_em||'').startsWith(mes)).length;
+  let concl=0; alunos.forEach(a=>{ CURSOS.forEach(c=>{ const l=lessonsOf(c.id); if(l.length&&l.every(x=>(S.allProg||[]).some(p=>p.user_id===a.id&&p.aula_id===x.id))) concl++ }) });
+  const card=(v,t,sub,ir,alerta)=>`<div ${ir?`data-ir="${ir}"`:''} style="${alerta?'background:#7A1B2B;border-color:#E4C677':''}"><b>${v}</b><span>${t}</span>${sub?`<small>${sub}</small>`:''}</div>`;
+  $('#stats').innerHTML=card(pendPag,'Pix a conferir',pendPag?'toque para conferir':'tudo conferido','pagamentos',pendPag>0)
+    +card(ativos,'Alunos ativos',alunos.length+' inscritos no total')
+    +card(novos,'Novos neste mês','',null)
+    +card(brl(rec),'Receita do mês','toque para abrir o caixa','contab')
+    +card(atras,'Mensalidades atrasadas',vence+' vencem em 7 dias','mens',atras>0)
+    +card(provas,'Provas feitas no mês','')
+    +card(concl,'Cursos concluídos','soma de todos os alunos')
+    +card(etuPendencias(L).length,'Pendências do MEI','toque para ver','contab',etuPendencias(L).length>0);
+  $$('#stats [data-ir]').forEach(d=>d.onclick=()=>{ const k=d.dataset.ir; if(k==='mens'){ const p=$('#mensPanel'); if(p) p.scrollIntoView({behavior:'smooth'}); return } const t=document.querySelector('.tabs button[data-tab="'+k+'"]'); if(t) t.click() });
+}
+let etuMensFiltro='atrasada';
+function etuMensalidades(){
+  const P=$('#mensPanel'); if(!P) return; const alunos=(S.alunos||[]).filter(a=>!a.is_admin);
+  const L=[]; alunos.forEach(a=>a.matriculas.forEach(m=>L.push({a,m,s:etuSituacaoMens(m)})));
+  const G=[['atrasada','Atrasadas'],['vence','Vencem em 7 dias'],['suspensa','Suspensas'],['emdia','Em dia'],['semvalidade','Sem vencimento']];
+  const cont=k=>L.filter(x=>x.s===k).length; const lista=L.filter(x=>x.s===etuMensFiltro).sort((x,y)=>String(x.m.expira_em||'')<String(y.m.expira_em||'')?-1:1);
+  const msgPara=(x)=>{ const t=curso(x.m.curso_id)?.titulo||'curso', n=(x.a.nome||'').split(' ')[0];
+    if(x.s==='vence') return `A paz do Senhor, ${n}! Aqui é da Escola Teológica União. Passando para lembrar, com carinho, que a mensalidade do ${t} vence em ${fmtDate(x.m.expira_em)}. O Pix é ${CONFIG.PIX_CHAVE}; depois é só enviar o comprovante pela plataforma. Deus abençoe os seus estudos!`;
+    if(x.s==='atrasada') return `A paz do Senhor, ${n}! Aqui é da Escola Teológica União. A mensalidade do ${t} venceu em ${fmtDate(x.m.expira_em)}, e o seu acesso continua liberado até ${fmtDate(addDias(x.m.expira_em,+CONFIG.TOLERANCIA_DIAS||0))}. O Pix é ${CONFIG.PIX_CHAVE}. Se precisar combinar outra data, é só responder esta mensagem. Deus abençoe!`;
+    if(x.s==='suspensa') return `A paz do Senhor, ${n}! Aqui é da Escola Teológica União. Sentimos a sua falta nos estudos do ${t}. O acesso está pausado por causa da mensalidade; assim que o Pix (${CONFIG.PIX_CHAVE}) for feito e o comprovante enviado, liberamos de novo. Se estiver passando por alguma dificuldade, fale conosco. Deus abençoe!`;
+    return `A paz do Senhor, ${n}! Aqui é da Escola Teológica União. Como estão os seus estudos no ${t}? Estamos à disposição. Deus abençoe!` };
+  P.innerHTML=`<h3 style="margin-top:0">Controle de mensalidades</h3><p style="margin:0;color:var(--muted);font-size:15.5px">A situação de cada matrícula é calculada sozinha pela data de vencimento. Toque num grupo para ver os alunos.</p>
+    <div class="mg">${G.map(([k,t])=>`<button type="button" data-mg="${k}" class="${etuMensFiltro===k?'on':''}">${t}<b>${cont(k)}</b></button>`).join('')}</div>
+    ${lista.length?`<div class="tbl-wrap"><table><thead><tr><th>Aluno</th><th>Curso</th><th>Vencimento</th><th></th></tr></thead><tbody>${lista.map(x=>{ const tel=String(x.a.telefone||'').replace(/\D/g,''); return `<tr><td><b>${esc(x.a.nome||'')}</b><br><span style="font-size:13.5px;color:var(--muted)">${esc(etuNumMatricula(x.a))}</span></td><td>${esc(curso(x.m.curso_id)?.titulo||x.m.curso_id)}</td><td>${x.m.expira_em?fmtDate(x.m.expira_em):'—'}</td><td><div class="chips">${tel?`<a class="btn btn-gold btn-sm" target="_blank" rel="noopener" href="https://wa.me/${tel.length<=11?'55'+tel:tel}?text=${encodeURIComponent(msgPara(x))}">Lembrar pelo WhatsApp</a>`:'<span style="font-size:14px;color:var(--muted)">sem telefone</span>'}<button class="btn btn-line btn-sm" type="button" data-mfi="${x.a.id}">Ficha</button><button class="btn btn-line btn-sm" type="button" data-mlib="${x.a.id}">Renovar</button></div></td></tr>` }).join('')}</tbody></table></div>`:'<p style="margin:0;color:var(--muted)">Nenhum aluno neste grupo.</p>'}`;
+  P.querySelectorAll('[data-mg]').forEach(b=>b.onclick=()=>{ etuMensFiltro=b.dataset.mg; etuMensalidades() });
+  P.querySelectorAll('[data-mfi]').forEach(b=>b.onclick=()=>dlgAcomp(S.alunos.find(a=>a.id===b.dataset.mfi)));
+  P.querySelectorAll('[data-mlib]').forEach(b=>b.onclick=()=>dlgAcesso(S.alunos.find(a=>a.id===b.dataset.mlib)));
+}

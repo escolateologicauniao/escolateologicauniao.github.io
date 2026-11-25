@@ -371,7 +371,7 @@ td{padding:10px;border-bottom:1px solid #EFE6D0;vertical-align:top}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 18px}
 @media (max-width:700px){.grid2,.grid3{grid-template-columns:1fr}}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
-.stat{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+.stat{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}.stat div[data-ir]{cursor:pointer}.stat small{display:block;font-size:13px;color:#E2C47A;margin-top:2px}.mg{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}.mg button{font:inherit;font-size:15px;border:1.5px solid #E1D4B2;background:#fff;border-radius:20px;padding:6px 12px;cursor:pointer;color:#1B2238}.mg button.on{background:var(--navy);color:#E2C47A;border-color:var(--navy)}.mg b{margin-left:4px}.fi-h{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:start}.fi-n{background:var(--navy);color:#E2C47A;border:1.5px solid #C9A24A;border-radius:10px;padding:8px 12px;text-align:center;font:700 15px Cinzel,Georgia,serif}.fi-n small{display:block;font:600 11px Georgia,serif;letter-spacing:.06em}.fi-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin:12px 0}.fi-g div{background:#FBF7EC;border:1px solid #EEE3C6;border-radius:8px;padding:8px 10px;font-size:15px}.fi-g small{display:block;color:#8C6A1E;font-weight:700;font-size:12.5px;letter-spacing:.04em}.fi-sec{margin:16px 0 6px;font:700 15px Cinzel,Georgia,serif;color:var(--navy);border-bottom:1px solid #C9A24A;padding-bottom:4px}
 @media (max-width:700px){.stat{grid-template-columns:1fr 1fr}}
 .stat div{background:var(--navy);color:var(--ivory);border-radius:var(--r);padding:16px;border:1px solid var(--gold)}
 .stat b{display:block;font-family:'Cinzel',serif;font-size:26px;color:var(--gold2)}
@@ -1410,6 +1410,7 @@ footer .legal{margin-top:30px;padding-top:18px;border-top:1px solid rgba(201,162
     </div>
     <div data-tabpanel="alunos">
       <div class="stat" id="stats"></div>
+      <div class="panel" id="mensPanel"></div>
       <div class="panel">
         <h3>Alunos inscritos</h3>
         <label for="busca">Buscar aluno</label><input id="busca" placeholder="Nome, e-mail ou telefone">
