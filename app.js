@@ -809,7 +809,8 @@ async function mountPlayer(container, cid, list, previewOnly, onChange){
     const a = list.find(x=>x.id===cur);
     const st = await stageHTML(a,cid);
     container.innerHTML = `<aside class="side">${sideHTML(list,cid,cur,previewOnly)}</aside><div class="stage">${st.html}</div>`;
-    container.querySelectorAll('[data-aula]').forEach(b=>b.onclick=()=>{cur=b.dataset.aula;S.aula=cur;draw();container.scrollIntoView({behavior:'smooth'})});
+    try{ if(a&&S.user){ const cc=CURSOS.find(x=>x.id===cid); localStorage.setItem('etu_ultima',JSON.stringify({cid,a:cur,d:S.disc||null,t:a.titulo||'',c:cc?cc.titulo:''})) } }catch(e){}
+    container.querySelectorAll('[data-aula]').forEach(b=>b.onclick=()=>{cur=b.dataset.aula;S.aula=cur;draw();containescrollTo({top:Math.max(0,r.getBoundingClientRect().top+scrollY-120),behavior:'smooth'})});
     container.querySelectorAll('[data-fs]').forEach(b=>b.onclick=()=>setFont(+b.dataset.fs));
     const nb = container.querySelector('[data-night]'); if(nb) nb.onclick=()=>{ toggleNight(); nb.textContent=document.body.classList.contains('night')?'Modo claro':'Modo noturno' };
     const ab=container.querySelector('[data-audio]'); if(ab&&!ab.disabled) ab.onclick=()=>{ const b=container.querySelector('#audioBox'); b.classList.toggle('hidden'); ab.classList.toggle('on') };
@@ -842,7 +843,7 @@ async function mountPlayer(container, cid, list, previewOnly, onChange){
         f.querySelectorAll('input[type=radio]').forEach(i=>i.disabled=true);
         f.querySelector('button[type=submit]').classList.add('hidden');
         const rt=box.querySelector('#retry'); if(rt) rt.onclick=()=>draw();
-        const nx=box.querySelector('#nextLes'); if(nx) nx.onclick=()=>{ const i=list.findIndex(x=>x.id===cur); const n=list.slice(i+1).find(x=>x.previa||hasAccess(cid)); if(n){cur=n.id;S.aula=cur} draw(); container.scrollIntoView({behavior:'smooth'}) };
+        const nx=box.querySelector('#nextLes'); if(nx) nx.onclick=()=>{ const i=list.findIndex(x=>x.id===cur); const n=list.slice(i+1).find(x=>x.previa||hasAccess(cid)); if(n){cur=n.id;S.aula=cur} draw(); containescrollTo({top:Math.max(0,r.getBoundingClientRect().top+scrollY-120),behavior:'smooth'}) };
         onChange && onChange();
         box.scrollIntoView({behavior:'smooth',block:'center'});
       }catch(er){ box.innerHTML = `<div class="score no">${esc(er.message)}</div>` }
@@ -1153,21 +1154,26 @@ function drawMural(){
   $$('[data-mdel]').forEach(b=>b.onclick=()=>{const m=S.mural.find(x=>x.id===b.dataset.mdel);confirmBox(`Excluir “${m.titulo}” do mural?`,async()=>{await API.delMural(m.id);S.mural=await API.mural();drawMural();renderTicker()})});
 }
 function dlgMural(m){
-  const tipos=['Aviso','Anúncio','Depoimento','Lançamento','Áudio','Podcast','Enquete','Pergunta e resposta'];
+  const tipos=['Aviso','Anúncio','Depoimento','Lançamento','Áudio','Podcast','Enquete','Pergunta e resposta','Desafio bíblico','Pedido de oração','Evento','Concluinte'];
+  const muLs=etuOpcoes(m?.texto||''), muNiv=(muLs.find(x=>x.startsWith('#'))||'#Básico').slice(1), muDt=(muLs.find(x=>x.startsWith('@'))||'@').slice(1);
   modal(`<h3>${m?'Editar item do mural':'Novo item do mural'}</h3>
     <label for="muTipo">Tipo</label><select id="muTipo">${tipos.map(t=>`<option ${m?.tipo===t?'selected':''}>${t}</option>`).join('')}</select>
     <label for="muTit">Título</label><input id="muTit" value="${esc(m?.titulo||'')}">
     <label for="muTxt">Texto</label><textarea id="muTxt" rows="3">${esc(etuTextoSem(m?.texto||''))}</textarea>
     <label for="muVid">Link do vídeo ou do áudio (opcional — YouTube, Google Drive, Spotify ou arquivo .mp3)</label><input id="muVid" value="${esc(m?.video_url||'')}" placeholder="https://...">
-    <div id="muOpBox"><label for="muOps">Opções da enquete (uma por linha, até 10)</label><textarea id="muOps" rows="4" placeholder="Opção 1&#10;Opção 2">${esc(etuOpcoes(m?.texto||'').join('\n'))}</textarea></div>
-    <p style="font-size:14.5px;color:var(--muted);margin:6px 0 0">Áudio e Podcast aparecem em “Áudios e podcast”. Pergunta e resposta aparece em “Perguntas teológicas” (título = pergunta; texto = resposta). Enquete: escreva a pergunta no título e as opções acima.</p>
+    <div id="muOpBox"><label for="muOps" id="muOpsLb">Opções da enquete (uma por linha, até 10)</label><textarea id="muOps" rows="4" placeholder="Opção 1&#10;Opção 2">${esc(muLs.filter(x=>!x.startsWith('#')&&!x.startsWith('@')).join('\n'))}</textarea></div>
+    <div id="muNivBox"><label for="muNiv">Nível da pergunta</label><select id="muNiv">${['Básico','Médio','Avançado','Quem sou eu?'].map(n=>`<option ${muNiv===n?'selected':''}>${n}</option>`).join('')}</select></div>
+    <div id="muDtBox"><label for="muDt">Data e hora do evento</label><input id="muDt" type="datetime-local" value="${esc(muDt)}"></div>
+    <p style="font-size:14.5px;color:var(--muted);margin:6px 0 0">Áudio e Podcast aparecem em “Áudios e podcast”. Pergunta e resposta aparece em “Perguntas teológicas” (título = pergunta; texto = resposta). Enquete: escreva a pergunta no título e as opções acima. Desafio bíblico: pergunta no título, alternativas acima com * antes da certa, e a explicação com o texto bíblico no campo Texto. Pedido de oração: publique só com autorização e sem o nome. Evento: aparece na Agenda e avisa no dia. Concluinte: nome do aluno no título (com autorização) e o curso no texto.</p>
     <div class="msg hidden" id="mMu"></div>
     <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-gold" id="salvarMu">Salvar</button></div>`,(r,close)=>{
-    const muT=r.querySelector('#muTipo'), muB=r.querySelector('#muOpBox'); const muF=()=>muB.style.display=muT.value==='Enquete'?'':'none'; muT.onchange=muF; muF();
+    const muT=r.querySelector('#muTipo'), muB=r.querySelector('#muOpBox'); const muF=()=>{ const v=muT.value; muB.style.display=(v==='Enquete'||v==='Desafio bíblico')?'':'none'; r.querySelector('#muOpsLb').textContent=v==='Desafio bíblico'?'Alternativas (uma por linha; coloque * antes da certa)':'Opções da enquete (uma por linha, até 10)'; r.querySelector('#muNivBox').style.display=v==='Desafio bíblico'?'':'none'; r.querySelector('#muDtBox').style.display=v==='Evento'?'':'none' }; muT.onchange=muF; muF();
     r.querySelector('#salvarMu').onclick=async()=>{
       const t=r.querySelector('#muTit').value.trim(); if(!t){show(r.querySelector('#mMu'),'Informe o título.','err');return}
       const tp=r.querySelector('#muTipo').value; let tx=r.querySelector('#muTxt').value.trim();
       if(tp==='Enquete'){ const ops=r.querySelector('#muOps').value.split('\n').map(x=>x.trim()).filter(Boolean).slice(0,10); if(ops.length<2){show(r.querySelector('#mMu'),'A enquete precisa de pelo menos 2 opções.','err');return} tx=tx+'\n'+ETU_OPS+'\n'+ops.join('\n') }
+      if(tp==='Desafio bíblico'){ const ops=r.querySelector('#muOps').value.split('\n').map(x=>x.trim()).filter(Boolean).slice(0,10); if(ops.length<2||ops.filter(x=>x.startsWith('*')).length!==1){show(r.querySelector('#mMu'),'Escreva pelo menos 2 alternativas e marque só a certa com * no início.','err');return} tx=tx+'\n'+ETU_OPS+'\n#'+r.querySelector('#muNiv').value+'\n'+ops.join('\n') }
+      if(tp==='Evento'){ const d=r.querySelector('#muDt').value; if(!d){show(r.querySelector('#mMu'),'Informe a data e a hora do evento.','err');return} tx=tx+'\n'+ETU_OPS+'\n@'+d }
       try{ await API.saveMural({id:m?.id,tipo:tp,titulo:t,texto:tx,video_url:r.querySelector('#muVid').value.trim()});
         close(); S.mural=await API.mural(); drawMural(); renderTicker() }catch(e){show(r.querySelector('#mMu'),e.message,'err')}
     };
@@ -1792,7 +1798,7 @@ function renderDepoimentos(){
   $('#waDepo2').href = WA('Olá! Sou aluno(a) da Escola Teológica União e quero enviar o meu depoimento em vídeo. Autorizo a publicação na plataforma.');
 }
 function renderMural(){
-  const items = S.mural.filter(m=>m.tipo!=='Pergunta e resposta');
+  const items = S.mural.filter(m=>!['Pergunta e resposta','Desafio bíblico','Pedido de oração','Evento','Concluinte'].includes(m.tipo));
   $('#muralSec').classList.toggle('hidden', !items.length);
   $('#muralGrid').innerHTML = items.map(etuCard).join(''); etuLigaEnquetes($('#muralGrid'));
 }
@@ -2340,7 +2346,7 @@ async function drawDivulgacao(){
 
 /* Quadro "Aplicativo" no Menu: versão, atualização, notificações e dicas de configuração */
 (function(){
-  var VERSAO='Versão 28 · 25/11/2026';
+  var VERSAO='Versão 29 · 25/11/2026';
   function estadoNotif(){ if(!('Notification' in window)) return 'não disponíveis neste aparelho'; return Notification.permission==='granted'?'ativadas ✓':(Notification.permission==='denied'?'bloqueadas no celular':'desativadas') }
   function monta(){
     var v=document.querySelector('[data-view="mais"] .wrap'); if(!v || document.getElementById('etuApp')) return;
@@ -2631,4 +2637,290 @@ addEventListener('load',()=>setTimeout(()=>{ const h=location.hash.slice(1); if(
   }
   function confere(){ if(window.ETU_LOJA) return; const h=location.hash.slice(1); if(h==='matricula'||h==='cadastro') setTimeout(abre,250) }
   addEventListener('hashchange',confere); addEventListener('load',()=>setTimeout(confere,900));
+})();
+
+/* ================= VIDA NA PLATAFORMA: Desafio Bíblico, versículo do dia, leitura anual, oração, agenda, concluintes e conquistas ================= */
+const ETU_VERSOS=[
+ ['Porque Deus amou o mundo de tal maneira que deu o seu Filho unigênito, para que todo aquele que nele crê não pereça, mas tenha a vida eterna.','João 3.16'],
+ ['Lâmpada para os meus pés é tua palavra e luz, para o meu caminho.','Salmos 119.105'],
+ ['Não to mandei eu? Esforça-te e tem bom ânimo; não temas, nem te espantes, porque o SENHOR, teu Deus, é contigo, por onde quer que andares.','Josué 1.9'],
+ ['O SENHOR é o meu pastor; nada me faltará.','Salmos 23.1'],
+ ['Posso todas as coisas naquele que me fortalece.','Filipenses 4.13'],
+ ['E sabemos que todas as coisas contribuem juntamente para o bem daqueles que amam a Deus, daqueles que são chamados por seu decreto.','Romanos 8.28'],
+ ['Procura apresentar-te a Deus aprovado, como obreiro que não tem de que se envergonhar, que maneja bem a palavra da verdade.','2 Timóteo 2.15'],
+ ['Confia no SENHOR de todo o teu coração e não te estribes no teu próprio entendimento. Reconhece-o em todos os teus caminhos, e ele endireitará as tuas veredas.','Provérbios 3.5-6'],
+ ['Mas os que esperam no SENHOR renovarão as suas forças e subirão com asas como águias; correrão e não se cansarão; caminharão e não se fatigarão.','Isaías 40.31'],
+ ['Mas buscai primeiro o Reino de Deus, e a sua justiça, e todas essas coisas vos serão acrescentadas.','Mateus 6.33'],
+ ['Clama a mim, e responder-te-ei e anunciar-te-ei coisas grandes e firmes, que não sabes.','Jeremias 33.3'],
+ ['Disse-lhe Jesus: Eu sou o caminho, e a verdade, e a vida. Ninguém vem ao Pai senão por mim.','João 14.6'],
+ ['Mas recebereis a virtude do Espírito Santo, que há de vir sobre vós; e ser-me-eis testemunhas tanto em Jerusalém como em toda a Judeia e Samaria e até aos confins da terra.','Atos 1.8'],
+ ['Ora, sem fé é impossível agradar-lhe, porque é necessário que aquele que se aproxima de Deus creia que ele existe e que é galardoador dos que o buscam.','Hebreus 11.6'],
+ ['Deus é o nosso refúgio e fortaleza, socorro bem presente na angústia.','Salmos 46.1'],
+ ['De sorte que a fé é pelo ouvir, e o ouvir pela palavra de Deus.','Romanos 10.17'],
+ ['Porque pela graça sois salvos, por meio da fé; e isso não vem de vós; é dom de Deus. Não vem das obras, para que ninguém se glorie.','Efésios 2.8-9'],
+ ['No princípio, era o Verbo, e o Verbo estava com Deus, e o Verbo era Deus.','João 1.1'],
+ ['As misericórdias do SENHOR são a causa de não sermos consumidos, porque as suas misericórdias não têm fim; novas são cada manhã; grande é a tua fidelidade.','Lamentações 3.22-23'],
+ ['Escondi a tua palavra no meu coração, para eu não pecar contra ti.','Salmos 119.11'],
+ ['Se confessarmos os nossos pecados, ele é fiel e justo para nos perdoar os pecados e nos purificar de toda injustiça.','1 João 1.9'],
+ ['Não temas, porque eu sou contigo; não te assombres, porque eu sou teu Deus; eu te esforço, e te ajudo, e te sustento com a destra da minha justiça.','Isaías 41.10'],
+ ['E conhecereis a verdade, e a verdade vos libertará.','João 8.32'],
+ ['Jesus Cristo é o mesmo ontem, e hoje, e eternamente.','Hebreus 13.8'],
+ ['E, se algum de vós tem falta de sabedoria, peça-a a Deus, que a todos dá liberalmente e o não lança em rosto; e ser-lhe-á dada.','Tiago 1.5'],
+ ['E, se eu for e vos preparar lugar, virei outra vez e vos levarei para mim mesmo, para que, onde eu estiver, estejais vós também.','João 14.3'],
+ ['Porque Esdras tinha preparado o seu coração para buscar a Lei do SENHOR, e para a cumprir, e para ensinar em Israel os seus estatutos e os seus direitos.','Esdras 7.10'],
+ ['Mas o fruto do Espírito é: amor, gozo, paz, longanimidade, benignidade, bondade, fé, mansidão, temperança. Contra essas coisas não há lei.','Gálatas 5.22-23'],
+ ['Aquele que testifica estas coisas diz: Certamente, cedo venho. Amém! Ora, vem, Senhor Jesus!','Apocalipse 22.20']
+];
+/* Banco do Desafio Bíblico: [pergunta, [alternativas], índice da certa, explicação com o contexto bíblico] */
+const ETU_DESAFIO={
+ 'Básico':[
+  ['Quantos livros tem a Bíblia usada pelas igrejas evangélicas?',['66','73','39','27'],0,'São 39 livros no Antigo Testamento e 27 no Novo Testamento. Os livros a mais das Bíblias católicas (os deuterocanônicos) não faziam parte das Escrituras hebraicas que Jesus e os apóstolos chamavam de "a Lei e os Profetas" (Lucas 24.44).'],
+  ['Em que cidade Jesus nasceu?',['Nazaré','Belém','Jerusalém','Cafarnaum'],1,'O profeta Miqueias anunciou que de Belém sairia aquele que seria Senhor em Israel (Miqueias 5.2), e Mateus registra o cumprimento: "tendo, pois, nascido Jesus em Belém de Judeia" (Mateus 2.1). Jesus cresceu em Nazaré, por isso foi chamado Nazareno.'],
+  ['Quem foi lançado na cova dos leões por continuar orando ao seu Deus?',['José','Jeremias','Daniel','Elias'],2,'Daniel continuou orando três vezes por dia, mesmo depois do decreto do rei Dario, e foi lançado na cova; Deus enviou o seu anjo e fechou a boca dos leões (Daniel 6.10, 16-22). A fidelidade na oração não depende de lei humana favorável.'],
+  ['O que aconteceu com os discípulos no dia de Pentecostes?',['Receberam as tábuas da Lei','Foram cheios do Espírito Santo e falaram em outras línguas','Viram Jesus ser transfigurado','Foram presos em Jerusalém'],1,'"E todos foram cheios do Espírito Santo e começaram a falar em outras línguas, conforme o Espírito Santo lhes concedia que falassem" (Atos 2.4). Cumpriu-se a promessa de Jesus de que receberiam poder para testemunhar (Atos 1.8).'],
+  ['Quantos apóstolos Jesus escolheu dentre os seus discípulos?',['7','10','12','70'],2,'"E, quando já era dia, chamou a si os seus discípulos, e escolheu doze deles, a quem também deu o nome de apóstolos" (Lucas 6.13). Os setenta foram enviados depois, em outra missão (Lucas 10.1).'],
+  ['Qual é o primeiro livro do Novo Testamento?',['Atos','Mateus','Romanos','João'],1,'Mateus abre o Novo Testamento com a genealogia de Jesus Cristo, "filho de Davi, filho de Abraão" (Mateus 1.1), ligando as promessas do Antigo Testamento ao seu cumprimento em Cristo.'],
+  ['Quem construiu a arca por ordem de Deus?',['Abraão','Moisés','Noé','Enoque'],2,'Deus disse a Noé: "Faze para ti uma arca da madeira de gofer" (Gênesis 6.14). Hebreus 11.7 explica que Noé o fez pela fé, "temendo, aparelhou a arca para a salvação da sua família".'],
+  ['O que significa o nome Emanuel?',['Deus salva','Deus conosco','Príncipe da paz','Filho do homem'],1,'Mateus cita Isaías 7.14 e explica: "e chamá-lo-ão pelo nome de Emanuel, que traduzido é: Deus conosco" (Mateus 1.23). O nome declara que o menino nascido da virgem é o próprio Deus presente no meio do seu povo.'],
+  ['Quem escreveu a maior parte das cartas do Novo Testamento?',['Pedro','João','Tiago','Paulo'],3,'Treze cartas, de Romanos a Filemom, trazem o nome de Paulo, chamado por Cristo para levar o evangelho aos gentios (Atos 9.15; Romanos 11.13).'],
+  ['Qual foi a primeira ordem criadora de Deus registrada em Gênesis 1?',['Haja luz','Produza a terra erva verde','Façamos o homem','Haja expansão'],0,'"E disse Deus: Haja luz. E houve luz" (Gênesis 1.3). Paulo usa esse mesmo texto para falar da conversão: o Deus que mandou a luz brilhar das trevas resplandeceu em nosso coração (2 Coríntios 4.6).'],
+  ['Qual mandamento Jesus chamou de "o primeiro e grande mandamento"?',['Não matarás','Amarás o Senhor, teu Deus, de todo o teu coração','Honra a teu pai e a tua mãe','Guardarás o sábado'],1,'Jesus respondeu citando Deuteronômio 6.5: "Amarás o Senhor, teu Deus, de todo o teu coração, e de toda a tua alma, e de todo o teu pensamento. Este é o primeiro e grande mandamento" (Mateus 22.37-38).'],
+  ['Onde Jesus foi batizado?',['No mar da Galileia','No rio Jordão','No tanque de Siloé','No rio Eufrates'],1,'"Então, veio Jesus da Galileia ter com João, junto do Jordão, para ser batizado por ele" (Mateus 3.13). Ali o Pai falou do céu e o Espírito desceu como pomba: a Trindade revelada no mesmo momento (Mateus 3.16-17).']
+ ],
+ 'Médio':[
+  ['Na interpretação pré-tribulacionista, qual é a diferença entre o arrebatamento e a vinda de Cristo em glória?',['São o mesmo evento, no mesmo dia','No arrebatamento Cristo vem buscar a Igreja nos ares, antes da Grande Tribulação; na vinda em glória Ele desce à terra com os santos, depois dela','O arrebatamento acontece no meio do Milênio','A vinda em glória acontece antes do arrebatamento'],1,'Em 1 Tessalonicenses 4.16-17 o Senhor desce e os salvos são "arrebatados juntamente com eles nas nuvens, a encontrar o Senhor nos ares". Em Apocalipse 19.11-14 Cristo vem do céu montado no cavalo branco, seguido pelos exércitos do céu, e em Zacarias 14.4 os seus pés tocam o monte das Oliveiras. A ETU, na linha pré-tribulacionista, entende que a Igreja é guardada "da hora da tentação que há de vir sobre todo o mundo" (Apocalipse 3.10; 1 Tessalonicenses 1.10). Outras escolas (meso e pós-tribulacionistas) entendem a ordem de outro modo.'],
+  ['A palavra "arrebatados", em 1 Tessalonicenses 4.17, traduz um verbo grego que significa:',['ser purificado aos poucos','ser tomado de repente, com força','ser julgado','ser esquecido'],1,'O verbo grego usado por Paulo indica tirar algo de um lugar de modo súbito e com força, como quem arrebata uma presa. É o mesmo verbo de Atos 8.39, quando "o Espírito do Senhor arrebatou a Filipe". A palavra "arrebatamento" vem do latim, que traduziu esse verbo; a doutrina, porém, está no texto, não no nome.'],
+  ['Quantas semanas há na profecia de Daniel 9?',['7','40','62','70'],3,'"Setenta semanas estão determinadas sobre o teu povo e sobre a tua santa cidade" (Daniel 9.24). Cada "semana" representa sete anos, num total de 490 anos: 7 + 62 semanas até o Messias (Daniel 9.25-26) e a última semana (Daniel 9.27), que a interpretação dispensacionalista situa no futuro, nos sete anos da Tribulação.'],
+  ['O que é o Tribunal de Cristo?',['O julgamento final dos incrédulos','O julgamento das obras dos salvos, para recompensa','O julgamento das nações no Antigo Testamento','O julgamento dos anjos caídos'],1,'"Porque todos devemos comparecer ante o tribunal de Cristo, para que cada um receba segundo o que tiver feito por meio do corpo, ou bem ou mal" (2 Coríntios 5.10). Ali as obras dos salvos são provadas pelo fogo (1 Coríntios 3.12-15). Os incrédulos serão julgados diante do grande trono branco (Apocalipse 20.11-15).'],
+  ['Segundo a doutrina pentecostal clássica, qual é a evidência física inicial do batismo no Espírito Santo?',['Chorar durante a oração','Falar em outras línguas','Ter uma visão','Cair ao chão'],1,'Em Atos o padrão se repete: em Jerusalém falaram em outras línguas (Atos 2.4); na casa de Cornélio os judeus souberam que os gentios receberam o Espírito "porque os ouviam falar línguas" (Atos 10.45-46); em Éfeso "falavam línguas e profetizavam" (Atos 19.6). O propósito do batismo é o poder para testemunhar (Atos 1.8).'],
+  ['Gálatas 5.22-23 trata de:',['os dons espirituais','o fruto do Espírito','os ministérios da Igreja','as obras da carne'],1,'O fruto é o caráter de Cristo formado no crente: "amor, gozo, paz, longanimidade, benignidade, bondade, fé, mansidão, temperança" (Gálatas 5.22-23). Os dons são capacitações distribuídas "para o que for útil" (1 Coríntios 12.7-11). Dom sem fruto escandaliza; fruto sem dom fica sem poder.'],
+  ['O que ensina a doutrina da Trindade?',['Um só Deus que se mostra em três modos diferentes','Três deuses que trabalham juntos','Um só Deus, eternamente existente em três Pessoas: Pai, Filho e Espírito Santo','O Pai é Deus; o Filho e o Espírito foram criados'],2,'A Escritura afirma um só Deus (Deuteronômio 6.4) e, ao mesmo tempo, distingue três Pessoas no único nome: "batizando-os em nome do Pai, e do Filho, e do Espírito Santo" (Mateus 28.19; 2 Coríntios 13.13). As outras alternativas descrevem erros antigos: o modalismo, o triteísmo e o arianismo.'],
+  ['O que é a justificação?',['Um processo gradual de melhora moral','O ato pelo qual Deus declara justo o pecador que crê em Cristo','A recompensa pelas boas obras','O batismo nas águas'],1,'"Sendo, pois, justificados pela fé, temos paz com Deus por nosso Senhor Jesus Cristo" (Romanos 5.1). Somos "justificados gratuitamente pela sua graça, pela redenção que há em Cristo Jesus" (Romanos 3.24). O crescimento gradual na vida cristã é a santificação.'],
+  ['Quem foi Melquisedeque?',['Um profeta do tempo dos reis','Rei de Salém e sacerdote do Deus Altíssimo','Um dos doze filhos de Jacó','O sumo sacerdote no tempo de Jesus'],1,'Ele saiu ao encontro de Abraão com pão e vinho e o abençoou (Gênesis 14.18-20). O Salmo 110.4 e Hebreus 7.1-3 o apresentam como figura do sacerdócio eterno de Cristo, superior ao sacerdócio levítico.'],
+  ['Em que ilha João recebeu a revelação do Apocalipse?',['Creta','Chipre','Patmos','Malta'],2,'"Eu, João, que também sou vosso irmão e companheiro na aflição... estava na ilha chamada Patmos, por causa da palavra de Deus e pelo testemunho de Jesus Cristo" (Apocalipse 1.9). Ali, exilado, recebeu a visão do Cristo glorificado.']
+ ],
+ 'Avançado':[
+  ['No Antigo Testamento, a palavra hebraica Sheol designa principalmente:',['o lago de fogo','o lugar ou estado dos mortos','o paraíso dos salvos apenas','um ídolo dos cananeus'],1,'Jacó diz que desceria chorando "à sepultura" (Gênesis 37.35), e o Salmo 16.10 declara: "não deixarás a minha alma no inferno". Pedro cita esse salmo em Atos 2.27 usando a palavra grega correspondente, Hades. Por isso as traduções alternam entre "sepultura", "inferno" e "cova", conforme o contexto. Lucas 16.19-31 mostra a separação entre o justo e o ímpio depois da morte.'],
+  ['Na teologia arminiana, adotada pela ETU, o que capacita o pecador a responder ao evangelho?',['A força da vontade humana sem ajuda de Deus','A graça preveniente, que alcança todos e torna possível a resposta de fé','Uma eleição que exclui a maioria antes da criação','O batismo infantil'],1,'"Porque a graça de Deus se há manifestado, trazendo salvação a todos os homens" (Tito 2.11). Cristo atrai todos a si (João 12.32), e Deus "quer que todos os homens se salvem" (1 Timóteo 2.4; 2 Pedro 3.9). A graça vem primeiro; o homem, capacitado por ela, pode crer ou resistir (Atos 7.51).'],
+  ['O Concílio de Niceia (ano 325) condenou qual ensino?',['O pelagianismo','O arianismo, que dizia que o Filho foi criado','O gnosticismo','O montanismo'],1,'Ário afirmava que o Filho teve começo. O concílio declarou que o Filho é da mesma substância do Pai, em harmonia com João 1.1 ("o Verbo era Deus") e Colossenses 1.16-17, onde todas as coisas foram criadas por Ele, e Ele "é antes de todas as coisas".'],
+  ['O que o Concílio de Calcedônia (ano 451) definiu sobre Cristo?',['Que Ele tinha só a natureza divina','Que Ele é uma só Pessoa em duas naturezas, verdadeiro Deus e verdadeiro homem','Que eram duas pessoas distintas','Que a humanidade dele era aparente'],1,'A definição afirma as duas naturezas "sem confusão, sem mudança, sem divisão, sem separação". Ela resume o que a Escritura diz: "o Verbo se fez carne" (João 1.14) e "nele habita corporalmente toda a plenitude da divindade" (Colossenses 2.9).'],
+  ['Em Filipenses 2.7, quando se diz que Cristo "aniquilou-se a si mesmo", o sentido correto é:',['Ele deixou de ser Deus','Sem deixar de ser Deus, tomou a forma de servo e se humilhou','Ele apenas parecia humano','Ele se tornou um anjo'],1,'O versículo anterior diz que Ele subsistia "em forma de Deus" (Filipenses 2.6). O esvaziamento não foi perda da divindade, mas acréscimo da humanidade e renúncia voluntária à glória: "tomando a forma de servo, fazendo-se semelhante aos homens" (2.7), "obediente até à morte" (2.8).'],
+  ['O dispensacionalismo se distingue por:',['ensinar que a Igreja substituiu Israel','manter a distinção entre Israel e a Igreja no plano de Deus','negar a volta de Cristo','ensinar que o Milênio já passou'],1,'Paulo ensina que "o endurecimento veio em parte sobre Israel, até que a plenitude dos gentios haja entrado. E, assim, todo o Israel será salvo" (Romanos 11.25-26), e chama a Igreja de mistério antes não revelado (Efésios 3.5-6). A teologia da aliança, outra escola evangélica, entende essa relação de modo diferente.'],
+  ['A "última semana" de Daniel 9.27 é entendida pelos dispensacionalistas como:',['o ministério terreno de Jesus','os sete anos futuros da Tribulação','a destruição de Jerusalém no ano 70 apenas','o período da Reforma'],1,'O texto fala de alguém que "firmará um concerto com muitos por uma semana" e, na metade dela, fará cessar o sacrifício. Jesus ligou essa profecia ao futuro ao falar da "abominação da desolação" (Mateus 24.15). Outros intérpretes aplicam a semana ao ministério de Cristo; a ETU segue a leitura futurista.'],
+  ['Em 2 Pedro 2.4 aparece um verbo que só ocorre ali no Novo Testamento. A que ele se refere?',['À prisão dos anjos que pecaram','Ao lugar dos crentes depois da morte','Ao túmulo de Jesus','Ao Hades de Lucas 16'],0,'"Porque, se Deus não perdoou aos anjos que pecaram, mas, havendo-os lançado no inferno, os entregou às cadeias da escuridão" (2 Pedro 2.4). O verbo grego vem de Tártaro, lugar de prisão de certos anjos até o juízo, como confirma Judas 6.'],
+  ['Quem foi Atanásio?',['Um imperador romano','Bispo de Alexandria que defendeu a divindade do Filho contra o arianismo','O autor do livro de Hebreus','Um reformador do século 16'],1,'Atanásio viveu no século 4, participou de Niceia ainda jovem e foi exilado várias vezes por não ceder ao arianismo. Na obra "A Encarnação do Verbo" defende que só Deus encarnado poderia salvar a humanidade, como ensina João 1.14 e Hebreus 2.14-17.'],
+  ['Onde acontecem as Bodas do Cordeiro em Apocalipse 19?',['Na terra, depois do Milênio','No céu, antes de Cristo descer em glória','Em Jerusalém, durante a Tribulação','No Éden restaurado'],1,'"São chamados bem-aventurados aqueles que são chamados à ceia das bodas do Cordeiro" (Apocalipse 19.9). Logo depois, João vê o céu aberto e o cavaleiro do cavalo branco vindo com os exércitos do céu (Apocalipse 19.11-14). A ordem do texto coloca as bodas antes da descida em glória.']
+ ],
+ 'Quem sou eu?':[
+  ['Fui vendido pelos meus irmãos, mas Deus me fez governador do Egito. Quem sou eu?',['Moisés','José','Daniel','Neemias'],1,'José foi vendido por vinte moedas de prata (Gênesis 37.28) e mais tarde Faraó o pôs sobre toda a terra do Egito (Gênesis 41.41). Ele mesmo resumiu: "vós bem intentastes mal contra mim, porém Deus o tornou em bem" (Gênesis 50.20).'],
+  ['Não passei pela morte: subi ao céu num redemoinho. Quem sou eu?',['Enoque','Eliseu','Elias','Moisés'],2,'"Elias subiu ao céu num redemoinho" (2 Reis 2.11). Enoque também não viu a morte (Hebreus 11.5), mas foi trasladado sem menção de redemoinho; por isso a resposta é Elias.'],
+  ['Sou o homem que mais viveu, segundo a Bíblia. Quem sou eu?',['Adão','Noé','Matusalém','Abraão'],2,'"Foram todos os dias de Matusalém novecentos e sessenta e nove anos, e morreu" (Gênesis 5.27).'],
+  ['Fui o primeiro mártir da Igreja e, morrendo, pedi perdão pelos que me apedrejavam. Quem sou eu?',['Tiago','Estêvão','Filipe','Barnabé'],1,'Estêvão orou: "Senhor, não lhes imputes este pecado" (Atos 7.59-60). Saulo, que mais tarde seria o apóstolo Paulo, consentia na sua morte (Atos 8.1).'],
+  ['Eu era chefe dos publicanos e subi numa árvore para ver Jesus. Quem sou eu?',['Mateus','Zaqueu','Nicodemos','Bartimeu'],1,'Zaqueu, de pequena estatura, subiu a um sicômoro (Lucas 19.2-4). Jesus se hospedou em sua casa e declarou: "Hoje, veio a salvação a esta casa" (Lucas 19.9).'],
+  ['Sou a rainha que arriscou a vida dizendo: "se perecer, pereci". Quem sou eu?',['Ester','Rute','Débora','Mical'],0,'Ester pediu que o povo jejuasse e disse: "irei ter com o rei, ainda que não é segundo a lei; e, perecendo, pereço" (Ester 4.16). Deus usou a sua coragem para livrar os judeus.'],
+  ['Venci os midianitas com apenas trezentos homens. Quem sou eu?',['Sansão','Gideão','Jefté','Baraque'],1,'O SENHOR disse a Gideão: "Com estes trezentos homens... vos livrarei" (Juízes 7.7), para que Israel não se gloriasse da própria força.'],
+  ['Neguei Jesus três vezes, mas fui restaurado e preguei no Pentecostes. Quem sou eu?',['João','Tomé','Pedro','André'],2,'Pedro negou o Senhor antes do canto do galo (Lucas 22.61-62), foi restaurado junto ao mar (João 21.15-17) e, cheio do Espírito, pregou o sermão em que quase três mil pessoas se converteram (Atos 2.14, 41).']
+ ]
+};
+const ETU_LIVROS=[['Gênesis',50],['Êxodo',40],['Levítico',27],['Números',36],['Deuteronômio',34],['Josué',24],['Juízes',21],['Rute',4],['1 Samuel',31],['2 Samuel',24],['1 Reis',22],['2 Reis',25],['1 Crônicas',29],['2 Crônicas',36],['Esdras',10],['Neemias',13],['Ester',10],['Jó',42],['Salmos',150],['Provérbios',31],['Eclesiastes',12],['Cantares',8],['Isaías',66],['Jeremias',52],['Lamentações',5],['Ezequiel',48],['Daniel',12],['Oseias',14],['Joel',3],['Amós',9],['Obadias',1],['Jonas',4],['Miqueias',7],['Naum',3],['Habacuque',3],['Sofonias',3],['Ageu',2],['Zacarias',14],['Malaquias',4],['Mateus',28],['Marcos',16],['Lucas',24],['João',21],['Atos',28],['Romanos',16],['1 Coríntios',16],['2 Coríntios',13],['Gálatas',6],['Efésios',6],['Filipenses',4],['Colossenses',4],['1 Tessalonicenses',5],['2 Tessalonicenses',3],['1 Timóteo',6],['2 Timóteo',4],['Tito',3],['Filemom',1],['Hebreus',13],['Tiago',5],['1 Pedro',5],['2 Pedro',3],['1 João',5],['2 João',1],['3 João',1],['Judas',1],['Apocalipse',22]];
+const ETU_MEDALHAS=[
+ ['primeira-aula','Primeiro passo','Concluiu a primeira aula'],
+ ['curso','Curso concluído','Terminou todas as aulas de um curso'],
+ ['constante','Constância','Abriu a plataforma 7 dias seguidos'],
+ ['desafio','Desafiante','Completou o primeiro Desafio Bíblico'],
+ ['gabarito','Gabarito perfeito','Acertou todas as perguntas de uma rodada'],
+ ['avancado','Obreiro aprovado','Fez 8 ou mais acertos no nível Avançado'],
+ ['leitor','Leitor da Palavra','Marcou 7 dias do plano de leitura'],
+ ['biblia','Bíblia toda','Completou o plano de leitura anual'],
+ ['intercessor','Intercessor','Marcou "Estou orando" em 5 pedidos']
+];
+function etuLS(k,d){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):d }catch(e){ return d } }
+function etuLSs(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)) }catch(e){} }
+function etuHoje(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0') }
+function etuDiaAno(){ const d=new Date(), i=new Date(d.getFullYear(),0,0); return Math.floor((d-i)/864e5) }
+/* Sons gerados no próprio aparelho, sem baixar arquivos */
+let etuAC=null;
+function etuSom(tipo){
+  if(etuLS('etu_som',true)===false) return;
+  try{ etuAC=etuAC||new (window.AudioContext||window.webkitAudioContext)(); const ac=etuAC, t0=ac.currentTime;
+    const nota=(f,ini,dur,forma,vol)=>{ const o=ac.createOscillator(), g=ac.createGain(); o.type=forma||'sine'; o.frequency.value=f; g.gain.setValueAtTime(0.0001,t0+ini); g.gain.exponentialRampToValueAtTime(vol||0.25,t0+ini+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t0+ini+dur); o.connect(g); g.connect(ac.destination); o.start(t0+ini); o.stop(t0+ini+dur+0.05) };
+    if(tipo==='certo'){ nota(659,0,.18,'triangle'); nota(880,.12,.18,'triangle'); nota(1319,.24,.35,'triangle') }
+    else if(tipo==='errado'){ nota(220,0,.22,'sawtooth',.12); nota(165,.18,.35,'sawtooth',.12); try{ navigator.vibrate&&navigator.vibrate(180) }catch(e){} }
+    else if(tipo==='vitoria'){ [523,659,784,1047,784,1047].forEach((f,i)=>nota(f,i*.13,.28,'triangle',.22)) }
+    else if(tipo==='medalha'){ [784,988,1175,1568].forEach((f,i)=>nota(f,i*.09,.4,'sine',.2)) }
+    else nota(600,0,.08,'sine',.12);
+  }catch(e){}
+}
+function etuConfete(){
+  const box=document.createElement('div'); box.className='confete'; const cores=['#C9A24A','#E2C47A','#7A1B2B','#1F6B45','#2B4C8C','#ffffff'];
+  for(let i=0;i<70;i++){ const s=document.createElement('i'); s.style.left=Math.random()*100+'%'; s.style.background=cores[i%cores.length]; s.style.animationDelay=(Math.random()*.6)+'s'; s.style.animationDuration=(1.8+Math.random()*1.4)+'s'; s.style.transform='rotate('+(Math.random()*360)+'deg)'; box.appendChild(s) }
+  document.body.appendChild(box); setTimeout(()=>box.remove(),3600);
+}
+function etuAviso(txt){ const t=document.createElement('div'); t.className='etu-toast'; t.innerHTML=txt; document.body.appendChild(t); setTimeout(()=>t.classList.add('on'),30); setTimeout(()=>{ t.classList.remove('on'); setTimeout(()=>t.remove(),400) },4200) }
+function etuGanha(id){
+  const g=etuLS('etu_medalhas',{}); if(g[id]) return; g[id]=etuHoje(); etuLSs('etu_medalhas',g);
+  const m=ETU_MEDALHAS.find(x=>x[0]===id); if(!m) return; etuSom('medalha'); etuAviso(`<b>🏅 Nova conquista: ${esc(m[1])}</b><span>${esc(m[2])}</span>`);
+}
+function etuConfereMedalhas(){
+  try{
+    if(S.prog&&S.prog.length) etuGanha('primeira-aula');
+    if(S.prog&&typeof ativosCursos==='function') ativosCursos().forEach(c=>{ const l=lessonsOf(c.id); if(l.length&&l.every(a=>S.prog.includes(a.id))) etuGanha('curso') });
+    const v=etuLS('etu_visitas',[]); let seq=1; for(let i=v.length-1;i>0;i--){ if((new Date(v[i])-new Date(v[i-1]))/864e5===1) seq++; else break } if(seq>=7) etuGanha('constante');
+    const lidos=Object.keys(etuLS('etu_leitura',{})).length; if(lidos>=7) etuGanha('leitor'); if(lidos>=365) etuGanha('biblia');
+    if(etuLS('etu_orando',[]).length>=5) etuGanha('intercessor');
+  }catch(e){}
+}
+(function(){ const v=etuLS('etu_visitas',[]), h=etuHoje(); if(v[v.length-1]!==h){ v.push(h); etuLSs('etu_visitas',v.slice(-30)) } })();
+
+/* ---------- Página inicial: versículo do dia, continuar de onde parou, desafio do dia ---------- */
+function etuVivoHome(){
+  const box=$('#vivoSec'); if(!box) return;
+  const v=ETU_VERSOS[etuDiaAno()%ETU_VERSOS.length], ult=etuLS('etu_ultima',null);
+  const ev=etuEventos().filter(e=>e.quando>=new Date(Date.now()-3*36e5)).slice(0,1)[0];
+  box.innerHTML=`<div class="wrap vivo-g">
+    <article class="vivo-c verso"><small>VERSÍCULO DO DIA</small><p>“${esc(v[0])}”</p><b>${esc(v[1])} (ARC)</b><button type="button" class="btn btn-line btn-sm" id="versoShare">Compartilhar</button></article>
+    <article class="vivo-c desafio"><small>DESAFIO BÍBLICO</small><b>Quanto você conhece da Palavra?</b><p>Perguntas dos níveis Básico, Médio e Avançado, charadas “Quem sou eu?” e a resposta certa explicada com o texto bíblico.</p><a class="btn btn-gold btn-sm" href="#desafio">Começar o desafio</a></article>
+    ${ult&&S.user?`<article class="vivo-c cont"><small>CONTINUAR DE ONDE PAROU</small><b>${esc(ult.t||'Sua última aula')}</b><p>${esc(ult.c||'')}</p><button type="button" class="btn btn-navy btn-sm" id="contUlt">Continuar</button></article>`:''}
+    ${ev?`<article class="vivo-c agenda"><small>PRÓXIMO EVENTO</small><b>${esc(ev.titulo)}</b><p>${esc(ev.dataTxt)}</p><a class="btn btn-line btn-sm" href="#agenda">Ver a agenda</a></article>`:''}
+  </div>`;
+  const sh=$('#versoShare'); if(sh) sh.onclick=async()=>{ const t=`“${v[0]}” (${v[1]}, ARC)\n\nVersículo do dia — Escola Teológica União\n${CONFIG.LINK_PUBLICO||location.origin}`; try{ if(navigator.share) await navigator.share({text:t}); else { await navigator.clipboard.writeText(t); etuAviso('<b>Versículo copiado.</b><span>Agora é só colar no WhatsApp.</span>') } }catch(e){} };
+  const cu=$('#contUlt'); if(cu) cu.onclick=()=>{ S.pendAula=ult.a; S.pendDisc=ult.d||null; location.hash='curso-'+ult.cid };
+}
+
+/* ---------- Desafio Bíblico ---------- */
+function etuDesafioBanco(nivel){
+  const base=(ETU_DESAFIO[nivel]||[]).map(q=>({p:q[0],o:q[1],c:q[2],e:q[3]}));
+  const mur=(S.mural||[]).filter(m=>m.tipo==='Desafio bíblico').map(m=>{ const ls=etuOpcoes(m.texto), niv=(ls.find(x=>x.startsWith('#'))||'#Básico').slice(1).trim(), ops=ls.filter(x=>!x.startsWith('#')); const c=ops.findIndex(x=>x.startsWith('*')); return {nivel:niv,p:m.titulo,o:ops.map(x=>x.replace(/^\*\s*/,'')),c:c<0?0:c,e:etuTextoSem(m.texto)} }).filter(q=>q.nivel===nivel&&q.o.length>=2);
+  return mur.concat(base);
+}
+function etuEmbaralha(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]] } return a }
+function etuDesafio(){
+  const r=$('#desafioBox'); if(!r) return;
+  const rec=etuLS('etu_desafio_rec',{}), som=etuLS('etu_som',true);
+  r.innerHTML=`<div class="dz-niveis">${Object.keys(ETU_DESAFIO).map(n=>`<button type="button" class="dz-nv" data-nv="${esc(n)}"><b>${esc(n)}</b><span>${n==='Quem sou eu?'?'Charadas sobre personagens bíblicos':n==='Básico'?'Para quem está começando':n==='Médio'?'Doutrinas e profecia':'Teologia, história e línguas'}</span>${rec[n]!==undefined?`<i>Seu recorde: ${rec[n]}</i>`:''}</button>`).join('')}</div>
+    <p class="dz-som"><label><input type="checkbox" id="dzSom" ${som?'checked':''}> Som ligado</label></p>`;
+  $('#dzSom').onchange=e=>etuLSs('etu_som',e.target.checked);
+  r.querySelectorAll('[data-nv]').forEach(b=>b.onclick=()=>{ etuSom('clique'); etuRodada(b.dataset.nv) });
+}
+function etuRodada(nivel){
+  const r=$('#desafioBox'); const qs=etuEmbaralha(etuDesafioBanco(nivel)).slice(0,10).map(q=>{ const idx=etuEmbaralha(q.o.map((_,i)=>i)); return {...q,o:idx.map(i=>q.o[i]),c:idx.indexOf(q.c)} });
+  let i=0, pts=0;
+  const desenha=()=>{
+    const q=qs[i];
+    r.innerHTML=`<div class="dz-top"><span>${esc(nivel)}</span><span>Pergunta ${i+1} de ${qs.length}</span><span>Acertos: ${pts}</span></div><div class="dz-barra"><i style="width:${i*100/qs.length}%"></i></div>
+      <h3 class="dz-p">${esc(q.p)}</h3><div class="dz-ops">${q.o.map((o,k)=>`<button type="button" class="dz-op" data-k="${k}"><span class="dz-l">${'ABCDEFGHIJ'[k]}</span>${esc(o)}</button>`).join('')}</div><div id="dzExp"></div>`;
+    r.querySelectorAll('.dz-op').forEach(b=>b.onclick=()=>{
+      if(r.querySelector('.dz-op.trava')) return; const k=+b.dataset.k, ok=k===q.c;
+      r.querySelectorAll('.dz-op').forEach(x=>{ x.classList.add('trava'); if(+x.dataset.k===q.c) x.classList.add('certo') }); if(!ok) b.classList.add('errado');
+      if(ok){ pts++; etuSom('certo') } else etuSom('errado');
+      $('#dzExp').innerHTML=`<div class="dz-exp ${ok?'ok':'no'}"><b>${ok?'Muito bem! Resposta certa.':'Não foi desta vez.'}</b><p><strong>A resposta certa é: ${esc(q.o[q.c])}.</strong></p><p>${esc(q.e)}</p><button type="button" class="btn btn-gold" id="dzProx">${i+1<qs.length?'Próxima pergunta':'Ver o resultado'}</button></div>`;
+      $('#dzProx').onclick=()=>{ i++; if(i<qs.length){ desenha(); scrollTo({top:Math.max(0,r.getBoundingClientRect().top+scrollY-120),behavior:'smooth'}) } else fim() };
+      setTimeout(()=>$('#dzExp').scrollIntoView({behavior:'smooth',block:'nearest'}),120);
+    });
+  };
+  const fim=()=>{
+    const n=qs.length, pc=Math.round(pts*100/n), rec=etuLS('etu_desafio_rec',{}); const novo=rec[nivel]===undefined||pts>rec[nivel]; if(novo){ rec[nivel]=pts; etuLSs('etu_desafio_rec',rec) }
+    const msg=pc===100?'Gabarito perfeito! Glória a Deus pelo seu estudo.':pc>=70?'Excelente! Você tem estudado a Palavra com dedicação.':pc>=40?'Bom caminho! Releia as explicações e tente de novo.':'Não desanime: cada explicação é uma aula. Tente outra vez.';
+    r.innerHTML=`<div class="dz-fim"><div class="dz-nota">${pts}<small>/${n}</small></div><h3>${esc(msg)}</h3>${novo?'<p class="dz-rec">Novo recorde neste nível!</p>':''}<p>“Procura apresentar-te a Deus aprovado, como obreiro que não tem de que se envergonhar, que maneja bem a palavra da verdade” (2 Timóteo 2.15).</p>
+      <div class="acts" style="justify-content:center"><button type="button" class="btn btn-gold" id="dzDe">Jogar de novo</button><button type="button" class="btn btn-line" id="dzNiv">Escolher outro nível</button><button type="button" class="btn btn-line" id="dzSh">Desafiar um amigo</button></div></div>`;
+    if(pc>=70){ etuSom('vitoria'); etuConfete() } else etuSom('clique');
+    etuGanha('desafio'); if(pts===n) etuGanha('gabarito'); if(nivel==='Avançado'&&pts>=8) etuGanha('avancado');
+    scrollTo({top:Math.max(0,r.getBoundingClientRect().top+scrollY-120),behavior:'smooth'}); $('#dzDe').onclick=()=>etuRodada(nivel); $('#dzNiv').onclick=etuDesafio;
+    $('#dzSh').onclick=async()=>{ const t=`Fiz ${pts} de ${n} no Desafio Bíblico (${nivel}) da Escola Teológica União. Você consegue fazer mais?\n${(CONFIG.LINK_PUBLICO||location.origin)}#desafio`; try{ if(navigator.share) await navigator.share({text:t}); else { await navigator.clipboard.writeText(t); etuAviso('<b>Mensagem copiada.</b><span>Cole no WhatsApp para desafiar um amigo.</span>') } }catch(e){} };
+  };
+  if(!qs.length){ r.innerHTML='<p>Nenhuma pergunta neste nível ainda.</p>'; return }
+  desenha(); scrollTo({top:Math.max(0,r.getBoundingClientRect().top+scrollY-120),behavior:'smooth'});
+}
+
+/* ---------- Plano de leitura da Bíblia em um ano ---------- */
+const ETU_CAPS=(()=>{ const l=[]; ETU_LIVROS.forEach(([b,n])=>{ for(let c=1;c<=n;c++) l.push([b,c]) }); return l })();
+function etuLeituraDia(d){ const a=Math.floor((d-1)*ETU_CAPS.length/365), b=Math.floor(d*ETU_CAPS.length/365)-1; const g=[]; for(let i=a;i<=b;i++){ const [l,c]=ETU_CAPS[i]; const u=g[g.length-1]; if(u&&u.l===l) u.f=c; else g.push({l,i:c,f:c}) } return g.map(x=>x.i===x.f?`${x.l} ${x.i}`:`${x.l} ${x.i}–${x.f}`).join('; ') }
+function etuLeitura(){
+  const r=$('#leituraBox'); if(!r) return;
+  let ini=etuLS('etu_leitura_ini',null); if(!ini){ ini=etuHoje(); etuLSs('etu_leitura_ini',ini) }
+  const lidos=etuLS('etu_leitura',{}), hoje=Math.min(365,Math.max(1,Math.floor((new Date(etuHoje())-new Date(ini))/864e5)+1)), feitos=Object.keys(lidos).length;
+  const linha=d=>`<label class="lt-d ${lidos[d]?'ok':''} ${d===hoje?'hoje':''}"><input type="checkbox" data-ld="${d}" ${lidos[d]?'checked':''}><span class="lt-n">Dia ${d}</span><span class="lt-t">${esc(etuLeituraDia(d))}</span></label>`;
+  let semana=''; for(let d=Math.max(1,hoje-2);d<=Math.min(365,hoje+4);d++) semana+=linha(d);
+  r.innerHTML=`<div class="panel lt-hoje"><small>LEITURA DE HOJE · DIA ${hoje} DE 365</small><h3>${esc(etuLeituraDia(hoje))}</h3><div class="progress"><i style="width:${Math.round(feitos*100/365)}%"></i></div><p class="meta">${feitos} de 365 dias lidos (${Math.round(feitos*100/365)}%). O plano percorre a Bíblia inteira, de Gênesis a Apocalipse, em ordem.</p></div>
+    <h3 style="margin:22px 0 8px">Esta semana</h3><div class="lt-lista">${semana}</div>
+    <details class="perg" style="margin-top:18px"><summary>Ver o plano completo (365 dias)</summary><div class="lt-lista" id="ltTudo"></div></details>
+    <p style="font-size:14.5px;color:var(--muted)">O plano começou em ${fmtDate(ini)} neste aparelho. <button type="button" class="btn btn-line btn-sm" id="ltZera">Recomeçar a partir de hoje</button></p>`;
+  const liga=root=>root.querySelectorAll('[data-ld]').forEach(c=>c.onchange=()=>{ const L=etuLS('etu_leitura',{}); if(c.checked){ L[c.dataset.ld]=etuHoje(); etuSom('certo') } else delete L[c.dataset.ld]; etuLSs('etu_leitura',L); etuConfereMedalhas(); etuLeitura() });
+  liga(r); r.querySelector('details').ontoggle=e=>{ const t=$('#ltTudo'); if(e.target.open&&!t.innerHTML){ let h=''; for(let d=1;d<=365;d++) h+=linha(d); t.innerHTML=h; liga(t) } };
+  $('#ltZera').onclick=()=>confirmBox('Recomeçar o plano de leitura a partir de hoje? As marcações feitas serão apagadas.',()=>{ etuLSs('etu_leitura_ini',etuHoje()); etuLSs('etu_leitura',{}); etuLeitura() });
+}
+
+/* ---------- Pedidos de oração ---------- */
+function etuOracao(){
+  const r=$('#oracaoLista'); if(!r) return;
+  const l=(S.mural||[]).filter(m=>m.tipo==='Pedido de oração'), meus=etuLS('etu_orando',[]);
+  r.innerHTML=l.length?l.map(m=>`<article class="mcard or-c"><div class="bd"><div class="mtag">PEDIDO DE ORAÇÃO</div><h3>${esc(m.titulo)}</h3>${m.texto?`<p>${esc(etuTextoSem(m.texto))}</p>`:''}<button type="button" class="btn ${meus.includes(String(m.id))?'btn-navy':'btn-gold'} btn-sm" data-or="${esc(String(m.id))}">${meus.includes(String(m.id))?'✓ Estou orando':'🙏 Estou orando'}</button><span class="or-n" data-orn="${esc(String(m.id))}"></span></div></article>`).join(''):'<div class="panel" style="grid-column:1/-1;text-align:center"><p style="margin:0">Os pedidos aprovados pela Direção aparecem aqui para que todos orem juntos.</p></div>';
+  r.querySelectorAll('[data-or]').forEach(async b=>{
+    const id=b.dataset.or, n=r.querySelector(`[data-orn="${id}"]`);
+    const conta=async()=>{ try{ const x=await API.resultado(isNaN(+id)?id:+id); const t=x.reduce((a,y)=>a+Number(y.votos),0); n.textContent=t?` ${t} irmão(s) orando`:'' }catch(e){} };
+    if(S.user) conta();
+    b.onclick=async()=>{ const L=etuLS('etu_orando',[]); if(!L.includes(id)){ L.push(id); etuLSs('etu_orando',L) } b.className='btn btn-navy btn-sm'; b.textContent='✓ Estou orando'; etuSom('certo');
+      if(S.user){ try{ await API.votar(isNaN(+id)?id:+id,0); conta() }catch(e){} } etuConfereMedalhas() };
+  });
+  const f=$('#orEnviar'); if(f&&!f.dataset.ok){ f.dataset.ok=1; f.onclick=async()=>{ const q=$('#orTxt').value.trim(), m=$('#mOr');
+    if(q.length<8) return show(m,'Escreva o seu pedido com um pouco mais de detalhe.','err');
+    const pub=$('#orPub').checked;
+    try{ await API.abrirAtendimento({nome:(S.profile&&S.profile.nome)||$('#orNome').value.trim()||'Visitante',contato:(S.user&&S.user.email)||$('#orCont').value.trim(),mensagem:'PEDIDO DE ORAÇÃO'+(pub?' (autoriza publicar sem o nome)':' (somente para a Direção)')+' — '+q,conversa:[]});
+      $('#orTxt').value=''; show(m,'Seu pedido chegou à Direção. Estamos orando com você.','ok') }catch(e){ show(m,'Não foi possível enviar agora: '+e.message,'err') } } }
+  const vis=$('#orVis'); if(vis) vis.style.display=S.user?'none':'';
+}
+
+/* ---------- Agenda ---------- */
+function etuEventos(){
+  return (S.mural||[]).filter(m=>m.tipo==='Evento').map(m=>{ const d=(etuOpcoes(m.texto).find(x=>x.startsWith('@'))||'').slice(1); const q=d?new Date(d):null;
+    return {...m,quando:q,dataTxt:q&&!isNaN(q)?q.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'})+' às '+q.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'Data a confirmar'} }).filter(e=>e.quando&&!isNaN(e.quando)).sort((a,b)=>a.quando-b.quando);
+}
+function etuAgenda(){
+  const r=$('#agendaLista'); if(!r) return; const ag=Date.now()-3*36e5, l=etuEventos(), prox=l.filter(e=>e.quando>=ag), pas=l.filter(e=>e.quando<ag).reverse().slice(0,6);
+  const card=e=>`<article class="ag-c ${e.quando<ag?'pass':''}"><div class="ag-d"><b>${e.quando.getDate()}</b><span>${e.quando.toLocaleDateString('pt-BR',{month:'short'}).replace('.','').toUpperCase()}</span></div><div class="ag-t"><h3>${esc(e.titulo)}</h3><p class="meta">${esc(e.dataTxt)}</p>${etuTextoSem(e.texto)?`<p>${esc(etuTextoSem(e.texto))}</p>`:''}${e.video_url?`<a class="btn btn-gold btn-sm" href="${esc(e.video_url)}" target="_blank" rel="noopener">${e.quando<ag?'Assistir':'Acessar o link'}</a>`:''}</div></article>`;
+  r.innerHTML=(prox.length?prox.map(card).join(''):'<div class="panel" style="text-align:center"><p style="margin:0">Nenhum evento marcado no momento. Os próximos aparecerão aqui.</p></div>')+(pas.length?`<h3 style="margin:26px 0 10px">Eventos realizados</h3>${pas.map(card).join('')}`:'');
+}
+(function(){ /* aviso no dia do evento, uma vez por evento */
+  function avisa(){ try{ const h=etuHoje(), vistos=etuLS('etu_ev_avisos',[]); etuEventos().forEach(e=>{ const d=e.quando; const dia=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      if(dia===h&&!vistos.includes(String(e.id))){ vistos.push(String(e.id)); etuLSs('etu_ev_avisos',vistos); etuAviso(`<b>Hoje: ${esc(e.titulo)}</b><span>${esc(e.dataTxt)}</span>`);
+        if('Notification' in window&&Notification.permission==='granted'&&navigator.serviceWorker) navigator.serviceWorker.ready.then(r=>r.showNotification('Hoje na ETU: '+e.titulo,{body:e.dataTxt,icon:'./icone-192.png',badge:'./selo-notif.png',tag:'etu-ev-'+e.id})) } }) }catch(e){} }
+  addEventListener('load',()=>setTimeout(avisa,4000));
+})();
+
+/* ---------- Concluintes ---------- */
+function etuConcluintes(){
+  const r=$('#concLista'); if(!r) return; const l=(S.mural||[]).filter(m=>m.tipo==='Concluinte');
+  r.innerHTML=l.length?l.map(m=>`<article class="cc-c"><div class="cc-s">🎓</div><h3>${esc(m.titulo)}</h3><p>${esc(etuTextoSem(m.texto)||'Concluiu o curso na Escola Teológica União')}</p><span>Parabéns!</span></article>`).join(''):'<div class="panel" style="grid-column:1/-1;text-align:center"><p style="margin:0">Os nomes dos alunos que concluírem os cursos, com a autorização deles, aparecerão aqui.</p></div>';
+}
+
+/* ---------- Conquistas ---------- */
+function etuConquistas(){
+  etuConfereMedalhas(); const r=$('#conqLista'); if(!r) return; const g=etuLS('etu_medalhas',{}), n=Object.keys(g).length;
+  r.innerHTML=`<p style="text-align:center;font-size:17px;margin:0 0 16px">Você conquistou <b>${n} de ${ETU_MEDALHAS.length}</b> medalhas.</p><div class="cq-g">${ETU_MEDALHAS.map(m=>`<div class="cq ${g[m[0]]?'on':''}"><div class="cq-i">${g[m[0]]?'🏅':'🔒'}</div><b>${esc(m[1])}</b><span>${esc(m[2])}</span>${g[m[0]]?`<i>${fmtDate(g[m[0]])}</i>`:''}</div>`).join('')}</div><p style="font-size:14.5px;color:var(--muted);text-align:center;margin-top:14px">As medalhas ficam guardadas neste aparelho.</p>`;
+}
+
+/* ---------- Rotas das novas páginas ---------- */
+function etuVivoRota(){ const h=location.hash.slice(1)||'inicio';
+  if(h==='inicio') etuVivoHome(); if(h==='desafio') etuDesafio(); if(h==='leitura') etuLeitura(); if(h==='oracao') etuOracao(); if(h==='agenda') etuAgenda(); if(h==='concluintes') etuConcluintes(); if(h==='conquistas') etuConquistas();
+  etuConfereMedalhas(); }
+addEventListener('hashchange',()=>setTimeout(etuVivoRota,80));
+addEventListener('load',()=>setTimeout(etuVivoRota,1600));
+
+/* ---------- Abertura: tela de boas-vindas com o selo, o versículo do dia e a credencial da plataforma ---------- */
+(function(){
+  try{ if(sessionStorage.getItem('etu_abertura')) return; sessionStorage.setItem('etu_abertura','1') }catch(e){}
+  if(/[#&](access_token|type=recovery)/.test(location.hash)) return;
+  const v=ETU_VERSOS[etuDiaAno()%ETU_VERSOS.length];
+  const d=document.createElement('div'); d.className='abertura'; d.setAttribute('role','dialog'); d.setAttribute('aria-label','Boas-vindas');
+  d.innerHTML=`<div class="ab-moldura">
+    <img class="ab-selo" src="selo-fita.webp" alt="Selo oficial da Escola Teológica União" width="150" height="150">
+    <h1>Escola Teológica União</h1><p class="ab-lema">Formação Bíblica, Teológica e Ministerial</p>
+    <div class="ab-orn"><span></span>✦<span></span></div>
+    <blockquote>“${esc(v[0])}”<cite>${esc(v[1])}</cite></blockquote>
+    <div class="ab-cred"><b>✓ Plataforma oficial verificada</b><span>Curso Livre de Teologia · Cristalina, Goiás</span><span>CNPJ ••.••7.548/0001-••</span></div>
+    <button type="button" class="ab-entrar">Entrar na plataforma</button>
+    <small class="ab-rod">Idealizador e Diretor Geral: Pr. Charlei de Jesus Lima Dias</small></div>`;
+  const fecha=()=>{ d.classList.add('sai'); setTimeout(()=>d.remove(),600) };
+  d.querySelector('.ab-entrar').onclick=fecha;
+  document.body.appendChild(d); setTimeout(fecha,12000);
 })();
