@@ -143,6 +143,7 @@ const CONFIG = {
     'Não pare no meio do caminho: cada aula concluída é uma pedra no alicerce do seu ministério',
     'MATRÍCULA VIA PIX — chave (telefone): (61) 99521-1432 · Envie o comprovante pelo WhatsApp e o curso completo é liberado',
     'Curso completo com vídeo-aulas, apostilas em PDF, provas, certificado e carteira de estudante',
+    'NOVIDADE: novos certificados e Carteira de Estudante (válida por 3 anos) — veja os modelos na página inicial',
     '“Procura apresentar-te a Deus aprovado…” — 2 Timóteo 2.15',
     'Dúvidas? Fale com a direção pelo WhatsApp (61) 99521-1432'
   ]
@@ -334,6 +335,9 @@ function SupaBackend(){
     async saveMural(m){ const row={tipo:m.tipo,titulo:m.titulo,texto:m.texto,video_url:m.video_url};
       m.id ? err(await sb.from('mural').update(row).eq('id',m.id)) : err(await sb.from('mural').insert(row)) },
     async delMural(id){ err(await sb.from('mural').delete().eq('id',id)) },
+    async votar(mid,op){ err(await sb.from('enquete_votos').upsert({mural_id:mid,user_id:S.user.id,opcao:op},{onConflict:'mural_id,user_id'})) },
+    async meusVotos(){ if(!S.user) return []; return err(await sb.from('enquete_votos').select('mural_id,opcao').eq('user_id',S.user.id)) },
+    async resultado(mid){ return err(await sb.rpc('enquete_resultado',{p_mural:mid})) },
     async saveAula(a,c){
       const row = {curso_id:a.curso_id,modulo:a.modulo,disc_ordem:a.disc_ordem||1,ordem:a.ordem,titulo:a.titulo,descricao:a.descricao,previa:a.previa,horas:a.horas||0,previa_texto:a.previa_texto||null,apostila_amostra:!!a.apostila_amostra};
       let id = a.id;
@@ -499,6 +503,9 @@ function DemoBackend(){
     async salvarAtendimento(id,c){ const L=demoAt(); Object.assign(L.find(x=>x.id===id)||{},c); try{localStorage.setItem('etu_atend',JSON.stringify(L))}catch(e){} },
     async saveMural(m){if(m.id)Object.assign(db.mural.find(x=>x.id===m.id),m);else db.mural.unshift({...m,id:uid(),criado_em:today()});save()},
     async delMural(id){db.mural=db.mural.filter(m=>m.id!==id);save()},
+    async votar(mid,op){ const v=JSON.parse(localStorage.getItem('etu_votos')||'{}'); v[mid]=op; localStorage.setItem('etu_votos',JSON.stringify(v)) },
+    async meusVotos(){ const v=JSON.parse(localStorage.getItem('etu_votos')||'{}'); return Object.keys(v).map(k=>({mural_id:k,opcao:v[k]})) },
+    async resultado(mid){ const v=JSON.parse(localStorage.getItem('etu_votos')||'{}'); return v[mid]!==undefined?[{opcao:v[mid],votos:1}]:[] },
     async delAula(id){db.questoes=db.questoes.filter(q=>q.aula_id!==id);db.aulas=db.aulas.filter(a=>a.id!==id);db.conteudo=db.conteudo.filter(c=>c.aula_id!==id);db.progresso=db.progresso.filter(p=>p.aula_id!==id);save()},
     reset(){mem=seed();Object.assign(db,mem);save()}
   };
@@ -1146,17 +1153,22 @@ function drawMural(){
   $$('[data-mdel]').forEach(b=>b.onclick=()=>{const m=S.mural.find(x=>x.id===b.dataset.mdel);confirmBox(`Excluir “${m.titulo}” do mural?`,async()=>{await API.delMural(m.id);S.mural=await API.mural();drawMural();renderTicker()})});
 }
 function dlgMural(m){
-  const tipos=['Aviso','Anúncio','Depoimento','Lançamento'];
+  const tipos=['Aviso','Anúncio','Depoimento','Lançamento','Áudio','Podcast','Enquete','Pergunta e resposta'];
   modal(`<h3>${m?'Editar item do mural':'Novo item do mural'}</h3>
     <label for="muTipo">Tipo</label><select id="muTipo">${tipos.map(t=>`<option ${m?.tipo===t?'selected':''}>${t}</option>`).join('')}</select>
     <label for="muTit">Título</label><input id="muTit" value="${esc(m?.titulo||'')}">
-    <label for="muTxt">Texto</label><textarea id="muTxt" rows="3">${esc(m?.texto||'')}</textarea>
-    <label for="muVid">Link do vídeo (opcional — YouTube, Vimeo ou Google Drive)</label><input id="muVid" value="${esc(m?.video_url||'')}" placeholder="https://youtu.be/...">
+    <label for="muTxt">Texto</label><textarea id="muTxt" rows="3">${esc(etuTextoSem(m?.texto||''))}</textarea>
+    <label for="muVid">Link do vídeo ou do áudio (opcional — YouTube, Google Drive, Spotify ou arquivo .mp3)</label><input id="muVid" value="${esc(m?.video_url||'')}" placeholder="https://...">
+    <div id="muOpBox"><label for="muOps">Opções da enquete (uma por linha, até 10)</label><textarea id="muOps" rows="4" placeholder="Opção 1&#10;Opção 2">${esc(etuOpcoes(m?.texto||'').join('\n'))}</textarea></div>
+    <p style="font-size:14.5px;color:var(--muted);margin:6px 0 0">Áudio e Podcast aparecem em “Áudios e podcast”. Pergunta e resposta aparece em “Perguntas teológicas” (título = pergunta; texto = resposta). Enquete: escreva a pergunta no título e as opções acima.</p>
     <div class="msg hidden" id="mMu"></div>
     <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-gold" id="salvarMu">Salvar</button></div>`,(r,close)=>{
+    const muT=r.querySelector('#muTipo'), muB=r.querySelector('#muOpBox'); const muF=()=>muB.style.display=muT.value==='Enquete'?'':'none'; muT.onchange=muF; muF();
     r.querySelector('#salvarMu').onclick=async()=>{
       const t=r.querySelector('#muTit').value.trim(); if(!t){show(r.querySelector('#mMu'),'Informe o título.','err');return}
-      try{ await API.saveMural({id:m?.id,tipo:r.querySelector('#muTipo').value,titulo:t,texto:r.querySelector('#muTxt').value.trim(),video_url:r.querySelector('#muVid').value.trim()});
+      const tp=r.querySelector('#muTipo').value; let tx=r.querySelector('#muTxt').value.trim();
+      if(tp==='Enquete'){ const ops=r.querySelector('#muOps').value.split('\n').map(x=>x.trim()).filter(Boolean).slice(0,10); if(ops.length<2){show(r.querySelector('#mMu'),'A enquete precisa de pelo menos 2 opções.','err');return} tx=tx+'\n'+ETU_OPS+'\n'+ops.join('\n') }
+      try{ await API.saveMural({id:m?.id,tipo:tp,titulo:t,texto:tx,video_url:r.querySelector('#muVid').value.trim()});
         close(); S.mural=await API.mural(); drawMural(); renderTicker() }catch(e){show(r.querySelector('#mMu'),e.message,'err')}
     };
   });
@@ -1444,7 +1456,7 @@ async function drawContab(){
   $('#cxCsv').onclick=()=>{ const lin=[['Data','Tipo','Categoria','Descrição','Forma','Documento','Valor']].concat(doAno.slice().sort((a,b)=>a.data<b.data?-1:1).map(l=>[fmtDate(l.data),l.tipo==='entrada'?'Entrada':'Saída',l.categoria,l.descricao||'',l.forma||'',l.documento||'',numBR(l.valor).toFixed(2).replace('.',',')]));
     const csv='﻿'+lin.map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(';')).join('\r\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download=`caixa-ETU-${ano}.csv`; a.click() };
   $('#cxImp').onclick=()=>{ const w=window.open('','_blank'); if(!w) return; w.document.write(`<html><head><title>Relatório financeiro — ${nomeMes(mes)}</title><style>body{font-family:Georgia,serif;color:#1b2340;margin:30px}h1{font-size:20px;margin:0}table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px}td,th{border:1px solid #ccc;padding:6px;text-align:left}th{background:#f3eedf}.r{text-align:right}</style></head><body>
-     <h1>Escola Teológica União</h1><div>CNPJ 59.037.548/****-** · Cristalina, Goiás</div><h2 style="font-size:16px">Relatório financeiro — ${esc(nomeMes(mes))}</h2>
+     <h1>Escola Teológica União</h1><div>CNPJ 59.037.548/0001-59 · Cristalina, Goiás</div><h2 style="font-size:16px">Relatório financeiro — ${esc(nomeMes(mes))}</h2>
      <p>Entradas: <b>${brl(ent)}</b> · Saídas: <b>${brl(sai)}</b> · Resultado: <b>${brl(ent-sai)}</b></p>
      <table><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th><th>Doc.</th><th class="r">Valor</th></tr>${doMes.slice().sort((a,b)=>a.data<b.data?-1:1).map(l=>`<tr><td>${fmtDate(l.data)}</td><td>${l.tipo==='entrada'?'Entrada':'Saída'}</td><td>${esc(l.categoria)}</td><td>${esc(l.descricao||'')}</td><td>${esc(l.documento||'')}</td><td class="r">${brl(numBR(l.valor))}</td></tr>`).join('')}</table>
      <p style="margin-top:40px">______________________________<br>Pr. Charlei de Jesus Lima Dias — Diretor Geral</p></body></html>`); w.document.close(); w.print() };
@@ -1457,10 +1469,11 @@ async function drawContab(){
       r.textContent=d.resposta+(d.fontes?.length?'\n\nManuais consultados: '+[...new Set(d.fontes)].join('; '):'');
     }catch(e){r.textContent=e.message}finally{botao.disabled=false}
   };
+  try{ etuFechamento(P,L) }catch(e){ console.log(e) }
 }
 function recibo(l){ if(!l) return; const w=window.open('','_blank'); if(!w) return; const n=l.documento||('R-'+String(l.id).slice(-6).toUpperCase());
   w.document.write(`<html><head><title>Recibo ${esc(n)}</title><style>body{font-family:Georgia,serif;color:#1b2340;max-width:680px;margin:40px auto;border:2px solid #C9A24A;padding:30px}h1{text-align:center;letter-spacing:.2em;font-size:22px;margin:0}.c{text-align:center}.v{font-size:22px;font-weight:bold}</style></head><body>
-   <div class="c"><b>ESCOLA TEOLÓGICA UNIÃO</b><br>CNPJ 59.037.548/****-** · Cristalina, Goiás<br>Curso Livre de Teologia</div><hr>
+   <div class="c"><b>ESCOLA TEOLÓGICA UNIÃO</b><br>CNPJ 59.037.548/0001-59 · Cristalina, Goiás<br>Curso Livre de Teologia</div><hr>
    <h1>RECIBO</h1><p class="c">Nº ${esc(n)} &nbsp;·&nbsp; <span class="v">${brl(numBR(l.valor))}</span></p>
    <p>Recebemos de <b>${esc((l.descricao||'').split(' — ')[0]||'__________________')}</b> a importância de <b>${brl(numBR(l.valor))}</b>, referente a <b>${esc(l.categoria)}${(l.descricao||'').includes(' — ')?' — '+esc(l.descricao.split(' — ').slice(1).join(' — ')):''}</b>, paga por ${esc(l.forma||'Pix')} em ${fmtDate(l.data)}.</p>
    <p>Para clareza, firmamos o presente recibo.</p><p style="text-align:right">Cristalina, Goiás, ${dataExtenso(new Date(l.data+'T12:00:00'))}.</p>
@@ -1533,7 +1546,7 @@ async function renderDoc(tipo, cid){
         <p style="font-size:19px;line-height:1.7;color:#1B2238;margin:14px auto 0;max-width:780px">Certificamos que <b class="cz" style="font-size:22px;letter-spacing:.06em">${esc(p.nome||'')}</b> concluiu o <b>${esc(c.titulo)}</b>, curso livre de formação bíblica, teológica e ministerial${horas?`, com carga horária de <b>${horas} horas</b>`:''}, cumprindo todas as aulas e avaliações exigidas pela Escola Teológica União.</p>
         <p style="font-size:17px;color:#1B2238;margin:12px 0 0">Cristalina, Goiás, ${dataExtenso()}.</p>
         <div style="display:flex;justify-content:center;margin-top:8px"><div style="text-align:center;width:330px"><img src="${ASSINATURA}" alt="Assinatura do Diretor" style="width:210px;margin-bottom:-8px"><div style="border-top:1px solid #1B2238;padding-top:4px;font-size:14px" class="cz">PR. CHARLEI DE JESUS LIMA DIAS</div><div style="font-size:14px;font-style:italic">Idealizador e Diretor Geral</div></div></div>
-        <p style="font-size:12.5px;color:#4a4f5e;margin:12px 0 0">Registro ${reg} · CNPJ 59.037.548/****-** · Curso livre; não equivale a curso de graduação ou pós-graduação.</p>
+        <p style="font-size:12.5px;color:#4a4f5e;margin:12px 0 0">Registro ${reg} · CNPJ ••.••7.548/0001-•• · Curso livre; não equivale a curso de graduação ou pós-graduação.</p>
       </div></div>`;
   } else {
     const val = m?.expira_em ? fmtDate(m.expira_em) : (()=>{const x=new Date();x.setFullYear(x.getFullYear()+1);return x.toLocaleDateString('pt-BR')})();
@@ -1563,7 +1576,7 @@ async function renderDoc(tipo, cid){
           <p style="font-size:12.5px;font-style:italic;margin:10px 0 0">“Procura apresentar-te a Deus aprovado…” — 2 Timóteo 2.15</p>
           <div style="display:flex;gap:24px;margin-top:6px"><div style="flex:1;text-align:center"><div style="height:44px;border-bottom:1px solid #1B2238"></div><div class="cz" style="font-size:9.5px;margin-top:3px">ASSINATURA DO ALUNO</div></div>
           <div style="flex:1;text-align:center"><div style="height:44px;border-bottom:1px solid #1B2238;position:relative"><img src="${ASSINATURA}" alt="Assinatura do Diretor" style="position:absolute;left:50%;bottom:2px;transform:translateX(-50%);width:140px"></div><div class="cz" style="font-size:9.5px;margin-top:3px">PR. CHARLEI DE JESUS LIMA DIAS</div><div style="font-size:10px;font-style:italic">Idealizador e Diretor Geral</div></div></div></div>
-        <div style="position:absolute;left:12px;right:12px;bottom:12px;height:28px;background:#0F1E3D;border-top:2px solid #C9A24A;border-radius:0 0 12px 12px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;color:#C9A24A;font-size:10.5px" class="cz"><span>CNPJ 59.037.548/****-**</span><span>${reg}</span></div>
+        <div style="position:absolute;left:12px;right:12px;bottom:12px;height:28px;background:#0F1E3D;border-top:2px solid #C9A24A;border-radius:0 0 12px 12px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;color:#C9A24A;font-size:10.5px" class="cz"><span>CNPJ ••.••7.548/0001-••</span><span>${reg}</span></div>
       </div></div>`;
   }
   { const cod=reg; const urlV=CONFIG.LINK_PUBLICO+'#validar-'+cod; box.insertAdjacentHTML('beforeend',`<div style="display:flex;gap:14px;align-items:center;justify-content:center;margin:14px 0 0;flex-wrap:wrap">${qrSVG(urlV,92)}<p style="font-size:14px;color:#4a4f5e;margin:0;max-width:420px">Código de autenticidade: <b>${esc(cod)}</b><br>Aponte a câmera para o QR Code ou confira em ${esc(CONFIG.LINK_PUBLICO)}#validar</p></div>`); }
@@ -1779,12 +1792,10 @@ function renderDepoimentos(){
   $('#waDepo2').href = WA('Olá! Sou aluno(a) da Escola Teológica União e quero enviar o meu depoimento em vídeo. Autorizo a publicação na plataforma.');
 }
 function renderMural(){
-  const items = S.mural;
+  const items = S.mural.filter(m=>m.tipo!=='Pergunta e resposta');
   $('#muralSec').classList.toggle('hidden', !items.length);
-  $('#muralGrid').innerHTML = items.map(m=>{ const v=toEmbed(m.video_url);
-    return `<article class="mcard">${v&&EMBED_OK?`<div class="video"><iframe src="${esc(v)}" title="${esc(m.titulo)}" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`:''}
-      <div class="bd"><div class="mtag">${esc((m.tipo||'').toUpperCase())}</div><h3>${esc(m.titulo)}</h3><p>${esc(m.texto||'')}</p>
-      ${m.video_url?`<a class="btn btn-line btn-sm" style="margin-top:10px" href="${esc(m.video_url)}" target="_blank" rel="noopener">Assistir em nova aba</a>`:''}</div></article>`}).join(''); }
+  $('#muralGrid').innerHTML = items.map(etuCard).join(''); etuLigaEnquetes($('#muralGrid'));
+}
 /* ---------- mostrar senha ---------- */
 function olho(abre){return abre?'<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>':'<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M3 3l18 18M10.6 5.1A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7a10 10 0 0 0 4.4-1"/></svg>'}
 function ligaOlho(root=document){ root.querySelectorAll('input[type=password]').forEach(inp=>{ if(inp.parentNode.classList.contains('pw')) return;
@@ -2329,7 +2340,7 @@ async function drawDivulgacao(){
 
 /* Quadro "Aplicativo" no Menu: versão, atualização, notificações e dicas de configuração */
 (function(){
-  var VERSAO='Versão 23 · 24/11/2026';
+  var VERSAO='Versão 28 · 25/11/2026';
   function estadoNotif(){ if(!('Notification' in window)) return 'não disponíveis neste aparelho'; return Notification.permission==='granted'?'ativadas ✓':(Notification.permission==='denied'?'bloqueadas no celular':'desativadas') }
   function monta(){
     var v=document.querySelector('[data-view="mais"] .wrap'); if(!v || document.getElementById('etuApp')) return;
@@ -2366,19 +2377,33 @@ async function drawDivulgacao(){
 /* Aparência: estilo do brasão e cor do aplicativo (escolha de cada pessoa, guardada no aparelho) */
 (function(){
   var TEMAS={
-    azul:{n:'Azul-marinho',c:['#0F1E3D','#16294F','#1E3463']},
-    bordo:{n:'Bordô',c:['#4A0F1C','#5E1626','#74202F']},
-    rosa:{n:'Rosa',c:['#6B1F45','#82295A','#99346C']},
-    laranja:{n:'Laranja',c:['#6E2A0C','#863512','#9C431A']},
-    camurca:{n:'Camurça',c:['#4E3A28','#604833','#73583F']},
-    verde:{n:'Verde',c:['#0E3B2E','#14493A','#1B5A47']},
-    roxo:{n:'Roxo',c:['#2E1A4A','#3B2360','#4A2D76']},
-    grafite:{n:'Grafite',c:['#1C1E23','#26292F','#33373F']}
+    azul:{n:'Azul-marinho',g:1,c:['#0F1E3D','#16294F','#1E3463']},
+    azulreal:{n:'Azul-royal',g:1,c:['#16307A','#1D3C91','#2548A8']},
+    petroleo:{n:'Petróleo',g:1,c:['#0E3B45','#134A56','#1A5B69']},
+    verde:{n:'Verde',g:1,c:['#0E3B2E','#14493A','#1B5A47']},
+    oliva:{n:'Oliva',g:1,c:['#3A3F1E','#474D25','#565E2D']},
+    grafite:{n:'Grafite',g:1,c:['#1C1E23','#26292F','#33373F']},
+    preto:{n:'Preto',g:1,c:['#0B0B0C','#151517','#202024']},
+    chocolate:{n:'Chocolate',g:1,c:['#3B2418','#4A2E1F','#5A3826']},
+    camurca:{n:'Camurça',g:1,c:['#4E3A28','#604833','#73583F']},
+    bordo:{n:'Bordô',g:1,c:['#4A0F1C','#5E1626','#74202F']},
+    roxo:{n:'Roxo',g:1,c:['#2E1A4A','#3B2360','#4A2D76']},
+    rosa:{n:'Rosa',g:2,c:['#6B1F45','#82295A','#99346C']},
+    rosaantigo:{n:'Rosa-antigo',g:2,c:['#6E3A4C','#80465A','#93526A']},
+    fucsia:{n:'Fúcsia',g:2,c:['#7A1458','#8F1A68','#A3207A']},
+    vinho:{n:'Vinho',g:2,c:['#5A1A3A','#6E2248','#842A57']},
+    ameixa:{n:'Ameixa',g:2,c:['#4A1F3D','#5A2649','#6B2E57']},
+    lavanda:{n:'Lavanda',g:2,c:['#4B3C78','#57468A','#63519C']},
+    coral:{n:'Coral',g:2,c:['#8A3324','#9C3C2B','#AE4633']},
+    laranja:{n:'Laranja',g:2,c:['#6E2A0C','#863512','#9C431A']},
+    terracota:{n:'Terracota',g:2,c:['#6B3020','#7D3A27','#8F452F']},
+    turquesa:{n:'Turquesa',g:2,c:['#0F4F52','#145E62','#1A6E72']}
   };
+  var BRILHO={suave:'brightness(.93)',normal:'none',intenso:'brightness(1.06) saturate(1.12)'};
   function ler(k,d){ try{ return localStorage.getItem(k)||d }catch(e){ return d } }
   function grava(k,v){ try{ localStorage.setItem(k,v) }catch(e){} }
   function aplicaTema(){
-    var t=TEMAS[ler('etu_tema','azul')]||TEMAS.azul, r=document.documentElement.style;
+    var t=TEMAS[ler('etu_tema','azul')]||TEMAS.azul, r=document.documentElement.style; r.filter=BRILHO[ler('etu_brilho','normal')]||'none';
     r.setProperty('--navy',t.c[0]); r.setProperty('--navy2',t.c[1]); r.setProperty('--navy3',t.c[2]);
     var m=document.querySelector('meta[name="theme-color"]'); if(m) m.setAttribute('content',t.c[0]);
   }
@@ -2398,25 +2423,31 @@ async function drawDivulgacao(){
     var v=document.querySelector('[data-view="mais"] .wrap'); if(!v || document.getElementById('etuAparencia')) return;
     var d=document.createElement('div'); d.id='etuAparencia'; d.className='panel'; d.style.cssText='margin-top:18px;color:#1B2238;background:#FFFDF6';
     var orig=(document.querySelector('img.crest')||{}).dataset; var escudo=(orig&&orig.orig)||'';
-    var bt='';
-    Object.keys(TEMAS).forEach(function(k){ var t=TEMAS[k]; bt+='<button type="button" data-tema="'+k+'" title="'+t.n+'" style="display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;cursor:pointer;font-family:inherit;font-weight:600;font-size:13px;color:#1B2238;padding:4px"><span style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,'+t.c[2]+','+t.c[0]+');border:3px solid #E1D4B2;box-shadow:0 1px 3px rgba(0,0,0,.25)"></span>'+t.n+'</button>' });
+    var bt='',bt2='';
+    Object.keys(TEMAS).forEach(function(k){ var t=TEMAS[k]; var h='<button type="button" data-tema="'+k+'" title="'+t.n+'" style="display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;cursor:pointer;font-family:inherit;font-weight:600;font-size:13px;color:#1B2238;padding:4px"><span style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,'+t.c[2]+','+t.c[0]+');border:3px solid #E1D4B2;box-shadow:0 1px 3px rgba(0,0,0,.25)"></span>'+t.n+'</button>'; if(t.g===2) bt2+=h; else bt+=h });
     d.innerHTML='<h3 style="margin:0 0 10px">Aparência</h3>'+
       '<p style="margin:0 0 8px;font-weight:600;color:#1B2238">Estilo do brasão</p>'+
       '<div style="display:flex;gap:12px;margin-bottom:16px">'+
         '<button type="button" data-br="medalhao" style="flex:1;background:#fff;border:2px solid #E1D4B2;border-radius:10px;padding:10px;cursor:pointer;color:#1B2238;font-weight:600;font-family:inherit"><img src="brasao-redondo.webp" alt="" style="width:64px;height:64px;display:block;margin:0 auto 6px">Medalhão</button>'+
         '<button type="button" data-br="escudo" style="flex:1;background:#fff;border:2px solid #E1D4B2;border-radius:10px;padding:10px;cursor:pointer;color:#1B2238;font-weight:600;font-family:inherit"><img src="'+escudo+'" alt="" style="height:64px;display:block;margin:0 auto 6px">Escudo</button>'+
       '</div>'+
-      '<p style="margin:0 0 8px;font-weight:600;color:#1B2238">Cor do aplicativo</p>'+
+      '<p style="margin:0 0 8px;font-weight:600;color:#1B2238">Cor do aplicativo · clássicas</p>'+
       '<div style="display:flex;flex-wrap:wrap;gap:6px 10px">'+bt+'</div>'+
+      '<p style="margin:14px 0 8px;font-weight:600;color:#1B2238">Cor do aplicativo · tons femininos e vivos</p>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:6px 10px">'+bt2+'</div>'+
+      '<p style="margin:16px 0 8px;font-weight:600;color:#1B2238">Brilho da tela</p>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="btn btn-line btn-sm" data-bri="suave" style="color:#1B2238">Suave</button><button type="button" class="btn btn-line btn-sm" data-bri="normal" style="color:#1B2238">Normal</button><button type="button" class="btn btn-line btn-sm" data-bri="intenso" style="color:#1B2238">Intenso</button></div>'+
       '<p style="margin:12px 0 0;font-size:14.5px;color:#5b6070">A escolha vale para este aparelho. Os documentos oficiais (certificados e carteirinhas) mantêm sempre o padrão da escola.</p>';
     v.appendChild(d);
     function marca(){
       var tm=ler('etu_tema','azul'), br=ler('etu_brasao','medalhao');
       d.querySelectorAll('[data-tema] span').forEach(function(s){ s.style.borderColor=(s.parentNode.dataset.tema===tm)?'#C9A24A':'#E1D4B2'; s.style.outline=(s.parentNode.dataset.tema===tm)?'2px solid #8C6A1E':'none' });
       d.querySelectorAll('[data-br]').forEach(function(b){ b.style.borderColor=(b.dataset.br===br)?'#C9A24A':'#E1D4B2'; b.style.boxShadow=(b.dataset.br===br)?'0 0 0 2px #8C6A1E':'none' });
+      var bri=ler('etu_brilho','normal'); d.querySelectorAll('[data-bri]').forEach(function(b){ b.style.background=(b.dataset.bri===bri)?'#E9CF7F':'' });
     }
     d.querySelectorAll('[data-tema]').forEach(function(b){ b.onclick=function(){ grava('etu_tema',b.dataset.tema); aplicaTema(); marca() } });
     d.querySelectorAll('[data-br]').forEach(function(b){ b.onclick=function(){ grava('etu_brasao',b.dataset.br); aplicaBrasao(); marca() } });
+    d.querySelectorAll('[data-bri]').forEach(function(b){ b.onclick=function(){ grava('etu_brilho',b.dataset.bri); aplicaTema(); marca() } });
     marca();
     var app=document.getElementById('etuApp'); if(app) v.appendChild(app);
   }
@@ -2424,4 +2455,180 @@ async function drawDivulgacao(){
   addEventListener('load',function(){ setTimeout(tudo,300); setTimeout(aplicaBrasao,1500) });
   addEventListener('hashchange',function(){ setTimeout(tudo,250) });
   try{ new MutationObserver(function(){ clearTimeout(tudo.t); tudo.t=setTimeout(aplicaBrasao,120) }).observe(document.documentElement,{childList:true,subtree:true}) }catch(e){}
+})();
+
+/* Contador da Direção: obrigações do MEI, fechamento do mês e relatórios em PDF */
+function etuFechKey(m){ return 'etu_fech_'+m }
+function etuMesAnterior(){ const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-1); return d.toISOString().slice(0,7) }
+function etuFechStatus(m){ try{ return JSON.parse(localStorage.getItem(etuFechKey(m))||'{}') }catch(e){ return {} } }
+function etuFechGrava(m,o){ try{ localStorage.setItem(etuFechKey(m),JSON.stringify(Object.assign(etuFechStatus(m),o))) }catch(e){} }
+function etuPendencias(){
+  const hoje=new Date(), dia=hoje.getDate(), ant=etuMesAnterior(), st=etuFechStatus(ant), nm=MESES[+ant.slice(5)-1]+' de '+ant.slice(0,4), out=[];
+  if(!st.fechado) out.push({t:'Fechar o caixa de '+nm+' e gerar o Relatório Mensal de Receitas Brutas',p:'até o dia 20'});
+  if(!st.das) out.push({t:'Pagar o DAS do MEI referente a '+nm,p:'vence no dia 20'+(dia>20?' (atrasado: pague com juros no app MEI)':'')});
+  if(hoje.getMonth()<=4 && !etuFechStatus(String(hoje.getFullYear())).dasn) out.push({t:'Enviar a Declaração Anual do MEI (DASN-SIMEI) do ano de '+(hoje.getFullYear()-1),p:'até 31 de maio'});
+  return out;
+}
+function etuFechamento(P,L){
+  const ant=etuMesAnterior(), nm=k=>MESES[+k.slice(5)-1]+' de '+k.slice(0,4), st=etuFechStatus(ant), pend=etuPendencias(), ano=String(new Date().getFullYear());
+  const d=document.createElement('div'); d.className='cx-sec'; d.id='etuContador'; d.style.cssText='border:2px solid #C9A24A;border-radius:12px;padding:16px 18px;background:#FFFDF6;color:#1B2238;margin-bottom:18px';
+  d.innerHTML=`<h4 style="margin:0 0 6px">Contador da Direção</h4>
+   <p style="margin:0 0 10px;font-size:15.5px;color:#4a4f5e">Lembretes das obrigações do MEI e fechamento mensal do caixa. Os relatórios saem prontos para salvar em PDF (no celular: Compartilhar → Imprimir → Salvar como PDF).</p>
+   ${pend.length?`<div style="background:#FBEFEF;border:1px solid #E0B4B4;border-radius:10px;padding:10px 14px;margin-bottom:12px"><b style="color:#7A1B2B">Pendências agora</b><ul style="margin:6px 0 0;padding-left:20px">${pend.map(x=>`<li>${esc(x.t)} <i>(${esc(x.p)})</i></li>`).join('')}</ul></div>`:`<div style="background:#EAF5EC;border:1px solid #A7D3B1;border-radius:10px;padding:10px 14px;margin-bottom:12px"><b style="color:#1E5E33">Tudo em dia.</b> O mês de ${esc(nm(ant))} está fechado e o DAS está marcado como pago.</div>`}
+   <div style="display:grid;gap:10px">
+    <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff"><b>1. Fechamento de ${esc(nm(ant))}</b> — ${st.fechado?`<span class="pill on">Fechado em ${esc(st.fechado)}</span>`:'<span class="pill lock">Pendente</span>'}
+      <p style="margin:6px 0 8px;font-size:15px">Confira os lançamentos do mês, depois gere o relatório. Ele soma as entradas do caixa e monta o Relatório Mensal de Receitas Brutas no modelo do MEI, que deve ser guardado por 5 anos junto com os comprovantes.</p>
+      <div class="res"><button class="btn btn-gold btn-sm" type="button" id="fechGerar">Gerar relatório e fechar o mês</button>${st.fechado?'<button class="btn btn-line btn-sm" type="button" id="fechReabrir">Reabrir o mês</button>':''}</div></div>
+    <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff"><b>2. DAS do MEI de ${esc(nm(ant))}</b> — ${st.das?`<span class="pill on">Pago (${esc(st.das)})</span>`:'<span class="pill lock">A pagar até o dia 20</span>'}
+      <p style="margin:6px 0 8px;font-size:15px">Emita a guia no aplicativo MEI ou no Portal do Empreendedor (gov.br/mei) e pague até o dia 20, mesmo sem faturamento no mês. Depois de pagar, registre a saída no caixa (categoria Impostos) e marque aqui.</p>
+      <div class="res"><button class="btn btn-line btn-sm" type="button" id="fechDas">${st.das?'Desmarcar':'Marcar DAS como pago'}</button><a class="btn btn-line btn-sm" href="https://www.gov.br/empresas-e-negocios/pt-br/empreendedor" target="_blank" rel="noopener">Abrir o Portal do Empreendedor</a></div></div>
+    <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff"><b>3. Declaração anual (DASN-SIMEI)</b> — ${etuFechStatus(ano).dasn?`<span class="pill on">Enviada em ${esc(etuFechStatus(ano).dasn)}</span>`:'<span class="pill lock">Até 31 de maio</span>'}
+      <p style="margin:6px 0 8px;font-size:15px">Uma vez por ano, até 31 de maio, informe o faturamento total do ano anterior. O resumo abaixo soma os 12 meses do caixa para facilitar o preenchimento.</p>
+      <div class="res"><button class="btn btn-line btn-sm" type="button" id="fechAno">Gerar resumo do ano anterior</button><button class="btn btn-line btn-sm" type="button" id="fechDasn">${etuFechStatus(ano).dasn?'Desmarcar':'Marcar declaração como enviada'}</button></div></div>
+    <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff"><b>4. Nota fiscal</b>
+      <p style="margin:6px 0 0;font-size:15px">O MEI emite nota fiscal de serviço quando o pagador é empresa (CNPJ) ou quando o aluno pedir. Ao lançar uma entrada com nota, escreva no campo Documento o número começando por “NF” (ex.: NF 123); o relatório separa sozinho as receitas com e sem nota.</p></div>
+   </div>
+   <p style="margin:12px 0 0;font-size:14px;color:#5b6070">O fechamento fica marcado neste aparelho. Os prazos seguem as regras atuais do MEI; confirme sempre no Portal do Empreendedor ou com um contador.</p>`;
+  P.insertBefore(d,P.children[2]||null);
+  const ent=(arr)=>arr.filter(l=>l.tipo==='entrada'), sum=a=>a.reduce((x,l)=>x+numBR(l.valor),0), comNF=l=>/^\s*NF/i.test(l.documento||'');
+  function relMes(m){
+    const E=ent(L.filter(l=>(l.data||'').startsWith(m))), S=L.filter(l=>(l.data||'').startsWith(m)&&l.tipo==='saida');
+    const sem=sum(E.filter(l=>!comNF(l))), com=sum(E.filter(comNF));
+    const w=window.open('','_blank'); if(!w) return false;
+    w.document.write(`<html><head><title>Relatório Mensal ${nm(m)}</title><style>body{font-family:Georgia,serif;color:#1b2340;margin:28px;font-size:14px}h1{font-size:18px;margin:0}h2{font-size:15px;margin:22px 0 6px;border-bottom:1px solid #C9A24A}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ccc;padding:6px 8px;text-align:left}.r{text-align:right}.tot{font-weight:bold;background:#f4efe2}</style></head><body>
+     <h1>ESCOLA TEOLÓGICA UNIÃO</h1><div>CNPJ 59.037.548/0001-59 · Cristalina, Goiás · Microempreendedor Individual</div>
+     <h2>Relatório Mensal das Receitas Brutas — período de apuração: ${nm(m)}</h2>
+     <table><tr><th>Receita bruta mensal — prestação de serviços</th><th class="r">Valor</th></tr>
+     <tr><td>Receita com dispensa de emissão de documento fiscal</td><td class="r">${brl(sem)}</td></tr>
+     <tr><td>Receita com documento fiscal emitido</td><td class="r">${brl(com)}</td></tr>
+     <tr class="tot"><td>Total das receitas de prestação de serviços</td><td class="r">${brl(sem+com)}</td></tr></table>
+     <h2>Entradas do mês</h2><table><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th>Documento</th><th class="r">Valor</th></tr>${E.sort((a,b)=>a.data<b.data?-1:1).map(l=>`<tr><td>${fmtDate(l.data)}</td><td>${esc(l.categoria||'')}</td><td>${esc(l.descricao||'')}</td><td>${esc(l.documento||'')}</td><td class="r">${brl(numBR(l.valor))}</td></tr>`).join('')||'<tr><td colspan="5">Sem entradas no mês.</td></tr>'}</table>
+     <h2>Saídas do mês (controle interno)</h2><table><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th class="r">Valor</th></tr>${S.sort((a,b)=>a.data<b.data?-1:1).map(l=>`<tr><td>${fmtDate(l.data)}</td><td>${esc(l.categoria||'')}</td><td>${esc(l.descricao||'')}</td><td class="r">${brl(numBR(l.valor))}</td></tr>`).join('')||'<tr><td colspan="4">Sem saídas no mês.</td></tr>'}</table>
+     <p style="margin-top:14px">Resultado do mês (entradas menos saídas): <b>${brl(sum(E)-sum(S))}</b></p>
+     <p style="margin-top:30px">Local e data: Cristalina, Goiás, ${dataExtenso(new Date())}.</p>
+     <p style="margin-top:40px">______________________________<br>Pr. Charlei de Jesus Lima Dias — Empresário / Diretor Geral</p>
+     <p style="font-size:12px;color:#555;margin-top:20px">Guardar este relatório por 5 anos, com os comprovantes de recebimento e as notas fiscais emitidas e recebidas.</p></body></html>`);
+    w.document.close(); w.print(); return true;
+  }
+  $('#fechGerar').onclick=()=>{ if(relMes(ant)){ etuFechGrava(ant,{fechado:new Date().toLocaleDateString('pt-BR')}); setTimeout(drawContab,800) } };
+  const re=$('#fechReabrir'); if(re) re.onclick=()=>{ etuFechGrava(ant,{fechado:''}); drawContab() };
+  $('#fechDas').onclick=()=>{ etuFechGrava(ant,{das:st.das?'':new Date().toLocaleDateString('pt-BR')}); drawContab() };
+  $('#fechDasn').onclick=()=>{ const s2=etuFechStatus(ano); etuFechGrava(ano,{dasn:s2.dasn?'':new Date().toLocaleDateString('pt-BR')}); drawContab() };
+  $('#fechAno').onclick=()=>{ const a=String(+ano-1); const E=ent(L.filter(l=>(l.data||'').startsWith(a)));
+    const w=window.open('','_blank'); if(!w) return;
+    const ms=[...Array(12)].map((_,i)=>{ const k=a+'-'+String(i+1).padStart(2,'0'); const x=E.filter(l=>l.data.startsWith(k)); return [k,sum(x.filter(l=>!comNF(l))),sum(x.filter(comNF))] });
+    const tS=ms.reduce((x,m)=>x+m[1],0), tC=ms.reduce((x,m)=>x+m[2],0);
+    w.document.write(`<html><head><title>Resumo anual ${a}</title><style>body{font-family:Georgia,serif;color:#1b2340;margin:28px;font-size:14px}h1{font-size:18px;margin:0}table{width:100%;border-collapse:collapse;margin-top:14px}td,th{border:1px solid #ccc;padding:6px 8px}.r{text-align:right}.tot{font-weight:bold;background:#f4efe2}</style></head><body>
+     <h1>ESCOLA TEOLÓGICA UNIÃO</h1><div>CNPJ 59.037.548/0001-59 · Resumo para a Declaração Anual do MEI (DASN-SIMEI) — ano ${a}</div>
+     <table><tr><th>Mês</th><th class="r">Sem nota fiscal</th><th class="r">Com nota fiscal</th><th class="r">Total</th></tr>${ms.map(m=>`<tr><td>${MESES[+m[0].slice(5)-1]}</td><td class="r">${brl(m[1])}</td><td class="r">${brl(m[2])}</td><td class="r">${brl(m[1]+m[2])}</td></tr>`).join('')}
+     <tr class="tot"><td>Total do ano</td><td class="r">${brl(tS)}</td><td class="r">${brl(tC)}</td><td class="r">${brl(tS+tC)}</td></tr></table>
+     <p style="margin-top:14px">Na declaração, informe o total do ano como receita bruta de <b>prestação de serviços</b>. Se houve funcionário registrado, informe também.</p></body></html>`); w.document.close(); w.print() };
+}
+/* Aviso de pendências do contador ao abrir o Painel da Direção */
+(function(){
+  function avisa(){
+    if(!(S.profile&&S.profile.is_admin)) return; if(location.hash!=='#admin') return;
+    const pend=etuPendencias(), v=document.querySelector('[data-view="admin"] .wrap'); if(!v) return;
+    let b=document.getElementById('etuAvisoCont'); if(!pend.length){ if(b) b.remove(); return }
+    if(!b){ b=document.createElement('div'); b.id='etuAvisoCont'; b.style.cssText='background:#FFF7E3;border:1px solid #C9A24A;border-left:5px solid #C9A24A;border-radius:10px;padding:12px 16px;margin:14px 0;color:#1B2238'; v.insertBefore(b,v.firstChild) }
+    b.innerHTML='<b>Contador da Direção:</b> '+pend.length+' pendência(s) — '+pend.map(x=>esc(x.t)).join('; ')+'. <a href="#" id="etuIrCont">Abrir a Contabilidade</a>';
+    const a=document.getElementById('etuIrCont'); if(a) a.onclick=e=>{ e.preventDefault(); const t=document.querySelector('.tabs button[data-tab="contab"]'); if(t) t.click() };
+    try{ const k='etu_cont_notif_'+new Date().toISOString().slice(0,10); if('Notification' in window && Notification.permission==='granted' && !localStorage.getItem(k)){ localStorage.setItem(k,'1'); navigator.serviceWorker&&navigator.serviceWorker.ready.then(r=>r.showNotification('Contador da Direção',{body:pend[0].t+' ('+pend[0].p+')',icon:'./icone-192.png',badge:'./selo-notif.png',tag:'etu-contador'})) } }catch(e){}
+  }
+  addEventListener('hashchange',()=>setTimeout(avisa,700)); addEventListener('load',()=>setTimeout(avisa,2500));
+})();
+
+/* ---------- áudios, podcast, perguntas e enquetes ---------- */
+const ETU_OPS='---OPÇÕES---';
+function etuOpcoes(t){ const i=(t||'').indexOf(ETU_OPS); return i<0?[]:t.slice(i+ETU_OPS.length).split('\n').map(x=>x.trim()).filter(Boolean) }
+function etuTextoSem(t){ const i=(t||'').indexOf(ETU_OPS); return (i<0?(t||''):t.slice(0,i)).trim() }
+function etuAudio(url){
+  if(!url) return '';
+  let m=url.match(/drive\.google\.com\/file\/d\/([\w-]+)/); if(m) return `<iframe src="https://drive.google.com/file/d/${m[1]}/preview" title="Áudio" style="width:100%;height:110px;border:0;border-radius:8px" loading="lazy" allow="autoplay"></iframe>`;
+  m=url.match(/open\.spotify\.com\/(episode|show)\/([\w]+)/); if(m) return `<iframe src="https://open.spotify.com/embed/${m[1]}/${m[2]}" title="Podcast" style="width:100%;height:152px;border:0;border-radius:12px" loading="lazy" allow="encrypted-media"></iframe>`;
+  if(/\.(mp3|m4a|ogg|oga|wav|aac)(\?|$)/i.test(url)) return `<audio controls preload="none" style="width:100%" src="${esc(url)}"></audio>`;
+  const v=toEmbed(url); if(v&&v!==url) return `<div class="video"><iframe src="${esc(v)}" title="Áudio" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`;
+  return '';
+}
+function etuCard(m){
+  const tipo=m.tipo||'', txt=etuTextoSem(m.texto);
+  let midia='';
+  if(tipo==='Áudio'||tipo==='Podcast') midia=EMBED_OK?etuAudio(m.video_url):'';
+  else if(tipo!=='Enquete'){ const v=toEmbed(m.video_url); midia=v&&EMBED_OK?`<div class="video"><iframe src="${esc(v)}" title="${esc(m.titulo)}" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`:'' }
+  const enq=tipo==='Enquete'?`<div class="enq" data-enq="${esc(String(m.id))}">${etuOpcoes(m.texto).map((o,i)=>`<button type="button" class="enq-op" data-op="${i}"><span class="enq-t">${esc(o)}</span><span class="enq-bar"></span><span class="enq-p"></span></button>`).join('')}<p class="enq-msg"></p></div>`:'';
+  return `<article class="mcard">${midia&&tipo!=='Áudio'&&tipo!=='Podcast'?midia:''}<div class="bd"><div class="mtag">${esc(tipo.toUpperCase())}</div><h3>${esc(m.titulo)}</h3>${txt?`<p>${esc(txt)}</p>`:''}${(tipo==='Áudio'||tipo==='Podcast')?`<div style="margin-top:10px">${midia||(m.video_url?`<a class="btn btn-line btn-sm" href="${esc(m.video_url)}" target="_blank" rel="noopener">Ouvir</a>`:'')}</div>`:''}${enq}${m.video_url&&tipo!=='Áudio'&&tipo!=='Podcast'&&tipo!=='Enquete'?`<a class="btn btn-line btn-sm" style="margin-top:10px" href="${esc(m.video_url)}" target="_blank" rel="noopener">Assistir em nova aba</a>`:''}</div></article>`;
+}
+async function etuLigaEnquetes(root){
+  const boxes=[...(root||document).querySelectorAll('[data-enq]')]; if(!boxes.length) return;
+  let meus=[]; try{ meus=await API.meusVotos() }catch(e){}
+  for(const b of boxes){
+    const id=b.dataset.enq, meu=meus.find(v=>String(v.mural_id)===id), msg=b.querySelector('.enq-msg');
+    async function mostra(){ let r=[]; try{ r=await API.resultado(isNaN(+id)?id:+id) }catch(e){}
+      const tot=r.reduce((a,x)=>a+Number(x.votos),0); const mv=(await API.meusVotos().catch(()=>[])).find(v=>String(v.mural_id)===id);
+      b.querySelectorAll('.enq-op').forEach(o=>{ const n=Number((r.find(x=>+x.opcao===+o.dataset.op)||{}).votos||0), pc=tot?Math.round(n*100/tot):0;
+        o.querySelector('.enq-bar').style.width=pc+'%'; o.querySelector('.enq-p').textContent=tot?pc+'%':''; o.classList.toggle('meu',!!mv&&+mv.opcao===+o.dataset.op) });
+      msg.textContent=mv?`Seu voto foi registrado. ${tot} voto(s) no total. Você pode mudar o voto tocando em outra opção.`:'';
+    }
+    b.querySelectorAll('.enq-op').forEach(o=>o.onclick=async()=>{
+      if(!S.user){ msg.textContent='Entre na sua conta de aluno para votar.'; return }
+      try{ await API.votar(isNaN(+id)?id:+id,+o.dataset.op); await mostra() }catch(e){ msg.textContent='Não foi possível votar agora: '+e.message }
+    });
+    if(meu) mostra();
+  }
+}
+function etuOuvir(){
+  const l=S.mural.filter(m=>m.tipo==='Áudio'||m.tipo==='Podcast');
+  $('#ouvirGrid').innerHTML=l.length?l.map(etuCard).join(''):'<div class="panel" style="grid-column:1/-1;text-align:center"><p style="margin:0">Os primeiros estudos em áudio e episódios do podcast serão publicados em breve.</p></div>';
+}
+function etuEnquetes(){
+  const l=S.mural.filter(m=>m.tipo==='Enquete');
+  $('#enqGrid').innerHTML=l.length?l.map(etuCard).join(''):'<div class="panel" style="grid-column:1/-1;text-align:center"><p style="margin:0">Nenhuma enquete aberta no momento.</p></div>';
+  etuLigaEnquetes($('#enqGrid'));
+}
+function etuPerguntas(){
+  const l=S.mural.filter(m=>m.tipo==='Pergunta e resposta');
+  $('#pergLista').innerHTML=l.length?l.map(m=>`<details class="perg"><summary>${esc(m.titulo)}</summary><div>${esc(etuTextoSem(m.texto)).replace(/\n/g,'<br>')}${m.video_url?`<div style="margin-top:10px">${etuAudio(m.video_url)||`<a class="btn btn-line btn-sm" href="${esc(m.video_url)}" target="_blank" rel="noopener">Ver resposta em vídeo ou áudio</a>`}</div>`:''}</div></details>`).join(''):'<p style="margin:0;text-align:center">As respostas às perguntas dos alunos serão publicadas aqui.</p>';
+  const f=$('#pergEnviar'); if(f&&!f.dataset.ok){ f.dataset.ok=1; f.onclick=async()=>{ const q=$('#pergTxt').value.trim(), m=$('#mPerg');
+    if(q.length<10) return show(m,'Escreva a sua pergunta com um pouco mais de detalhe.','err');
+    try{ await API.abrirAtendimento({nome:(S.profile&&S.profile.nome)||$('#pergNome').value.trim()||'Visitante',contato:(S.user&&S.user.email)||$('#pergCont').value.trim(),mensagem:'PERGUNTA TEOLÓGICA — '+q,conversa:[]});
+      $('#pergTxt').value=''; show(m,'Pergunta enviada à Direção. As respostas escolhidas são publicadas nesta página, sem o nome de quem perguntou.','ok') }catch(e){ show(m,'Não foi possível enviar agora: '+e.message,'err') } } }
+  const vis=$('#pergVis'); if(vis) vis.style.display=S.user?'none':'';
+}
+addEventListener('hashchange',()=>{ const h=location.hash.slice(1); setTimeout(()=>{ if(h==='ouvir') etuOuvir(); if(h==='enquetes') etuEnquetes(); if(h==='perguntas') etuPerguntas() },60) });
+addEventListener('load',()=>setTimeout(()=>{ const h=location.hash.slice(1); if(h==='ouvir') etuOuvir(); if(h==='enquetes') etuEnquetes(); if(h==='perguntas') etuPerguntas() },1500));
+
+/* Botões flutuantes (Ajuda e WhatsApp) somem enquanto a pessoa rola a tela, para não ficar sobre o texto */
+(function(){ let t; addEventListener('scroll',()=>{ document.querySelectorAll('.wa-float,.ai-float').forEach(e=>e.classList.add('fab-oculto')); clearTimeout(t); t=setTimeout(()=>document.querySelectorAll('.wa-float,.ai-float').forEach(e=>e.classList.remove('fab-oculto')),1400) },{passive:true}) })();
+/* Diretrizes da escola: o aluno lê e concorda antes da matrícula */
+(function(){
+  const V='2026-11-25', K='etu_diretrizes';
+  function aceitou(){ try{ const r=JSON.parse(localStorage.getItem(K)||'null'); return r&&r.v===V }catch(e){ return false } }
+  function abre(){
+    if(aceitou()||document.getElementById('etuDiret')) return;
+    const o=document.createElement('div'); o.id='etuDiret'; o.setAttribute('role','dialog'); o.setAttribute('aria-modal','true'); o.setAttribute('aria-labelledby','etuDiretT');
+    o.style.cssText='position:fixed;inset:0;z-index:9998;background:rgba(5,10,25,.72);display:flex;align-items:center;justify-content:center;padding:14px';
+    o.innerHTML=`<div style="background:#FFFDF6;color:#1B2238;max-width:640px;width:100%;max-height:92vh;overflow:auto;border-radius:16px;border:2px solid #C9A24A;box-shadow:0 18px 50px rgba(0,0,0,.5)">
+      <div style="background:var(--navy);color:#F7EFD9;text-align:center;padding:18px 18px 14px;border-bottom:3px solid #C9A24A;border-radius:14px 14px 0 0"><img src="brasao-redondo.webp" alt="" style="width:74px;height:74px"><h2 id="etuDiretT" style="margin:8px 0 2px;color:#F7EFD9;font-size:21px;letter-spacing:.08em">Diretrizes da Escola</h2><p style="margin:0;color:#E2C47A;font-style:italic">Leia antes de se matricular</p></div>
+      <div style="padding:18px 20px">
+       <ol style="margin:0;padding-left:20px;line-height:1.55;font-size:16.5px">
+        <li><b>Curso livre:</b> formação bíblica, teológica e ministerial. Não é graduação nem pós-graduação e não depende do MEC.</li>
+        <li><b>Amparo legal:</b> Constituição Federal (artigo 5º, incisos 6 e 9; artigos 205, 206 e 209) e Lei nº 9.394/1996, artigo 1º.</li>
+        <li><b>Documentos:</b> carteira de estudante válida por 3 anos; certificado de cada etapa somente após todas as aulas e avaliações; todos verificáveis por código e QR Code.</li>
+        <li><b>Desistência:</b> até 7 dias da contratação, devolução integral (Código de Defesa do Consumidor, artigo 49). Depois, vale o contrato.</li>
+        <li><b>Conduta:</b> o material é protegido por direitos autorais; cópia, venda, fraude ou ofensa levam ao cancelamento do acesso.</li>
+        <li><b>Dados pessoais:</b> usados só para o estudo e os documentos, conforme a Política de Privacidade.</li>
+       </ol>
+       <p style="margin:12px 0 6px;font-size:15.5px">Leia na íntegra: <a href="nota-oficial.html" target="_blank" rel="noopener">Nota Oficial</a> · <a href="termos.html" target="_blank" rel="noopener">Termos de Uso e Contrato</a> · <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a></p>
+       <label style="display:flex;gap:12px;align-items:flex-start;margin:14px 0 0;font-size:16.5px;cursor:pointer;color:#1B2238;font-family:inherit;letter-spacing:0;text-transform:none;font-weight:600"><input type="checkbox" id="etuDiretOk" style="width:24px;height:24px;margin-top:2px;flex:none;accent-color:#1D3C91">Li e concordo com as diretrizes, a Nota Oficial, os Termos de Uso e Contrato e a Política de Privacidade.</label>
+       <div class="res" style="margin-top:16px"><button type="button" class="btn btn-gold" id="etuDiretSeg" disabled>Concordo e quero continuar</button><a class="btn btn-line" href="#inicio" id="etuDiretSai">Agora não</a></div>
+      </div></div>`;
+    document.body.appendChild(o);
+    const ck=o.querySelector('#etuDiretOk'), bt=o.querySelector('#etuDiretSeg');
+    ck.onchange=()=>{ bt.disabled=!ck.checked };
+    bt.onclick=()=>{ try{ localStorage.setItem(K,JSON.stringify({v:V,data:new Date().toISOString()})) }catch(e){} o.remove() };
+    o.querySelector('#etuDiretSai').onclick=()=>o.remove();
+    o.firstElementChild.scrollTop=0;
+  }
+  function confere(){ if(window.ETU_LOJA) return; const h=location.hash.slice(1); if(h==='matricula'||h==='cadastro') setTimeout(abre,250) }
+  addEventListener('hashchange',confere); addEventListener('load',()=>setTimeout(confere,900));
 })();
