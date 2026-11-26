@@ -2374,7 +2374,7 @@ async function drawDivulgacao(){
 
 /* Quadro "Aplicativo" no Menu: versão, atualização, notificações e dicas de configuração */
 (function(){
-  var VERSAO='Versão 34 · 26/11/2026';
+  var VERSAO='Versão 35 · 26/11/2026';
   function estadoNotif(){ if(!('Notification' in window)) return 'não disponíveis neste aparelho'; return Notification.permission==='granted'?'ativadas ✓':(Notification.permission==='denied'?'bloqueadas no celular':'desativadas') }
   function monta(){
     var v=document.querySelector('[data-view="mais"] .wrap'); if(!v || document.getElementById('etuApp')) return;
@@ -2822,6 +2822,7 @@ function etuVivoHome(){
     <article class="vivo-c verso"><small>VERSÍCULO DO DIA</small><p>“${esc(v[0])}”</p><b>${esc(v[1])} (ARC)</b><button type="button" class="btn btn-line btn-sm" id="versoShare">Compartilhar</button></article>
     <article class="vivo-c desafio"><small>DESAFIO BÍBLICO</small><b>Quanto você conhece da Palavra?</b><p>Perguntas dos níveis Básico, Médio e Avançado, charadas “Quem sou eu?” e a resposta certa explicada com o texto bíblico.</p><a class="btn btn-gold btn-sm" href="#desafio">Começar o desafio</a></article>
     ${!S.user?`<article class="vivo-c"><small>PRIMEIRA VEZ AQUI?</small><b>Guia da plataforma, passo a passo</b><p>Aprenda a entrar, se matricular, estudar, fazer as provas e receber o certificado e a carteira de estudante.</p><a class="btn btn-navy btn-sm" href="#como-usar">Ver o guia</a></article>`:''}
+    <article class="vivo-c" style="border:2px solid #7A1B2B"><small style="color:#7A1B2B">COMUNICADO OFICIAL</small><b>Cuidado com perfis falsos</b><p>O Pr. Charlei não usa Facebook há muitos anos. Conheça os únicos canais oficiais da escola.</p><a class="btn btn-navy btn-sm" href="#oficial">Ler o comunicado</a></article>
     ${ult&&S.user?`<article class="vivo-c cont"><small>CONTINUAR DE ONDE PAROU</small><b>${esc(ult.t||'Sua última aula')}</b><p>${esc(ult.c||'')}</p><button type="button" class="btn btn-navy btn-sm" id="contUlt">Continuar</button></article>`:''}
     ${ev?`<article class="vivo-c agenda"><small>PRÓXIMO EVENTO</small><b>${esc(ev.titulo)}</b><p>${esc(ev.dataTxt)}</p><a class="btn btn-line btn-sm" href="#agenda">Ver a agenda</a></article>`:''}
   </div>`;
@@ -3066,3 +3067,8 @@ function etuOficial(){
 }
 addEventListener('hashchange',()=>{ if(location.hash==='#oficial') setTimeout(etuOficial,80) });
 addEventListener('load',()=>{ if(location.hash==='#oficial') setTimeout(etuOficial,1200) });
+
+/* Comunicado oficial: compartilhar e destaque na página inicial */
+function etuComShare(){ const b=$('#comShare'); if(!b||b.dataset.ok) return; b.dataset.ok=1; b.onclick=async()=>{ const t=`*COMUNICADO OFICIAL — Escola Teológica União*\n\nHá muitos anos o Pr. Charlei de Jesus Lima Dias não utiliza o Facebook. Perfis antigos com o nome dele estão abandonados.\n\nOs únicos meios oficiais de contato são:\n• Plataforma: escolateologicauniao.github.io\n• WhatsApp: (61) 99521-1432\n• E-mail: etu.escolateologicauniao215@gmail.com\n\nNinguém está autorizado a pedir dinheiro, Pix, senhas ou códigos em nome do Pr. Charlei ou da escola. Qualquer outro perfil é falso.\n\n“Sede prudentes como as serpentes e símplices como as pombas” (Mateus 10.16).\n\nLeia o comunicado completo: ${CONFIG.LINK_PUBLICO||location.origin}#oficial`; try{ if(navigator.share) await navigator.share({text:t}); else { await navigator.clipboard.writeText(t); etuAviso('<b>Comunicado copiado.</b><span>Agora é só colar no WhatsApp.</span>') } }catch(e){} } }
+addEventListener('hashchange',()=>{ if(location.hash==='#oficial') setTimeout(etuComShare,90) });
+addEventListener('load',()=>{ if(location.hash==='#oficial') setTimeout(etuComShare,1300) });
