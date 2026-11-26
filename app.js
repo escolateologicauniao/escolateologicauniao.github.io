@@ -250,7 +250,8 @@ function SupaBackend(){
     async salvarLancamento(l){ err(await sb.from('lancamentos').insert(l)) },
     async apagarLancamento(id){ err(await sb.from('lancamentos').delete().eq('id',id)) },
     async perguntarContador(msgs,modo='contabil'){ const {data,error}=await sb.functions.invoke('assistente',{body:{mensagens:msgs,modo}}); if(error) throw new Error('O assistente não respondeu agora. Tente novamente em instantes.'); if(data?.erro) throw new Error(data.erro); return data },
-    async atualizarConta(d){ const {data:{user}}=await sb.auth.getUser(); if(!user) throw new Error('Entre novamente.');
+    async atualizarConta(d){ if(d&&d.nome&&!S.profile?.is_admin&&etuNomeReservado(d.nome,'')){ etuAlertaSeg('tentativa de trocar o nome da conta',d.nome,S.user?.email||'',S.profile?.telefone||'',etuNomeReservado(d.nome,'')); throw new Error('Este nome é reservado à Direção da Escola Teológica União.') } return this._atualizarConta(d) },
+    async _atualizarConta(d){ const {data:{user}}=await sb.auth.getUser(); if(!user) throw new Error('Entre novamente.');
       const v=await sb.auth.signInWithPassword({email:user.email,password:d.atual}); if(v.error) throw new Error('A senha atual não confere.');
       const up={}; if(d.email && d.email.toLowerCase()!==user.email.toLowerCase()) up.email=d.email; if(d.pw) up.password=d.pw;
       if(Object.keys(up).length) err(await sb.auth.updateUser(up));
@@ -1771,6 +1772,7 @@ $('#fSign').onsubmit = async e=>{ e.preventDefault(); const m=$('#mSign');
   const nome=$('#sNome').value.trim(), email=$('#sEmail').value.trim(), pw=$('#sPass').value;
   if(!nome||!email) return show(m,'Preencha o nome e o e-mail.','err');
   if(pw.length<6) return show(m,'A senha deve ter pelo menos 6 caracteres.','err');
+  { const rz=etuNomeReservado(nome,email); if(rz){ etuAlertaSeg('tentativa de cadastro',nome,email,$('#sTel').value.trim(),rz); return show(m,'Este nome ou e-mail é reservado à Direção da Escola Teológica União. Se esse é realmente o seu nome, fale com a escola pelo WhatsApp oficial para liberar o cadastro.','err') } }
   if(!$('#sAceite').checked) return show(m,'Para criar a conta, leia e aceite os Termos de Uso e o Contrato do curso.','err');
   if(!$('#sPriv').checked) return show(m,'Para criar a conta, leia e concorde com a Política de Privacidade.','err');
   try{ localStorage.setItem('etu_termos_aceite', JSON.stringify({versao:'2026-11-13', data:new Date().toLocaleString('pt-BR')})) }catch(_){}
@@ -2372,7 +2374,7 @@ async function drawDivulgacao(){
 
 /* Quadro "Aplicativo" no Menu: versão, atualização, notificações e dicas de configuração */
 (function(){
-  var VERSAO='Versão 33 · 25/11/2026';
+  var VERSAO='Versão 34 · 26/11/2026';
   function estadoNotif(){ if(!('Notification' in window)) return 'não disponíveis neste aparelho'; return Notification.permission==='granted'?'ativadas ✓':(Notification.permission==='denied'?'bloqueadas no celular':'desativadas') }
   function monta(){
     var v=document.querySelector('[data-view="mais"] .wrap'); if(!v || document.getElementById('etuApp')) return;
@@ -2993,7 +2995,8 @@ async function etuPainelNumeros(alunos,pendPag){
     +card(atras,'Mensalidades atrasadas',vence+' vencem em 7 dias','mens',atras>0)
     +card(provas,'Provas feitas no mês','')
     +card(concl,'Cursos concluídos','soma de todos os alunos')
-    +card(etuPendencias(L).length,'Pendências do MEI','toque para ver','contab',etuPendencias(L).length>0);
+    +card(etuPendencias(L).length,'Pendências do MEI','toque para ver','contab',etuPendencias(L).length>0)
+    +await (async()=>{ let n=0; try{ const lim=new Date(Date.now()-30*864e5).toISOString(); n=(await API.atendimentos()).filter(t=>String(t.criado_em||'')>=lim&&/^(ALERTA DE SEGURANÇA|DENÚNCIA DE PERFIL FALSO)/.test(String(t.mensagem||''))).length }catch(e){} return card(n,'Alertas de segurança','últimos 30 dias · toque para ver','atendimentos',n>0) })();
   $$('#stats [data-ir]').forEach(d=>d.onclick=()=>{ const k=d.dataset.ir; if(k==='mens'){ const p=$('#mensPanel'); if(p) p.scrollIntoView({behavior:'smooth'}); return } const t=document.querySelector('.tabs button[data-tab="'+k+'"]'); if(t) t.click() });
 }
 let etuMensFiltro='atrasada';
@@ -3037,3 +3040,29 @@ function etuMoeda(img,verso,legEl){
   if(document.readyState!=='loading') setTimeout(liga,50); else addEventListener('DOMContentLoaded',()=>setTimeout(liga,50));
   addEventListener('load',()=>setTimeout(liga,300));
 })();
+
+/* ---------- Proteção da identidade da escola: nomes reservados, alertas e canais oficiais ---------- */
+function etuNorm(t){ return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9@ ]/g,' ').replace(/\s+/g,' ').trim() }
+function etuNomeReservado(nome,email){
+  const n=etuNorm(nome), e=String(email||'').toLowerCase(), tk=n.split(' ');
+  const charl=tk.some(t=>/^charle[iys]$/.test(t));
+  if(charl&&tk.includes('dias')&&(tk.includes('lima')||tk.includes('jesus'))) return 'nome do Diretor';
+  if(/\b(pr|pastor|ap|apostolo|bispo|reverendo)\b ?charle[iys]\b/.test(n)) return 'título com o nome do Diretor';
+  if(/teologica uniao|escola teologica/.test(n)) return 'nome da escola';
+  if(/\b(diretor|diretora|direcao|diretoria|administrador|administracao|admin|suporte|secretaria|oficial)\b/.test(n)) return 'título da Direção';
+  if(/charleilimas98|escolateologicauniao|etu\.escola/.test(e)) return 'e-mail da escola ou do Diretor';
+  return '';
+}
+async function etuAlertaSeg(acao,nome,email,tel,motivo){
+  try{ await API.abrirAtendimento({nome:'ALERTA DE SEGURANÇA',contato:[email,tel].filter(Boolean).join(' · ')||'sem contato',mensagem:`ALERTA DE SEGURANÇA — ${acao} bloqueada (${motivo}). Nome digitado: "${String(nome||'').slice(0,120)}". E-mail: ${email||'—'}. Data: ${new Date().toLocaleString('pt-BR')}.`,conversa:[]}) }catch(e){}
+}
+function etuOficial(){
+  const f=$('#ofEnviar'); if(!f||f.dataset.ok) return; f.dataset.ok=1;
+  f.onclick=async()=>{ const m=$('#mOf'), onde=$('#ofOnde').value, link=$('#ofLink').value.trim(), txt=$('#ofTxt').value.trim();
+    if(!link&&txt.length<10) return show(m,'Informe o endereço do perfil ou descreva o que você viu.','err');
+    try{ await API.abrirAtendimento({nome:(S.profile&&S.profile.nome)||$('#ofNome').value.trim()||'Visitante',contato:(S.user&&S.user.email)||$('#ofCont').value.trim()||'sem contato',mensagem:`DENÚNCIA DE PERFIL FALSO — Onde: ${onde}. Endereço: ${link||'—'}. Relato: ${txt||'—'}`,conversa:[]});
+      $('#ofLink').value=''; $('#ofTxt').value=''; show(m,'Obrigado! A Direção recebeu a sua denúncia e vai verificar. Não envie dinheiro nem dados a perfis suspeitos.','ok') }catch(e){ show(m,'Não foi possível enviar agora: '+e.message,'err') } };
+  const v=$('#ofVis'); if(v) v.style.display=S.user?'none':'';
+}
+addEventListener('hashchange',()=>{ if(location.hash==='#oficial') setTimeout(etuOficial,80) });
+addEventListener('load',()=>{ if(location.hash==='#oficial') setTimeout(etuOficial,1200) });
