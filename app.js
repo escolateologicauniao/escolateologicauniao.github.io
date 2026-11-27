@@ -3084,10 +3084,14 @@ $("#sinoBt").onclick = async () => {
     localStorage.setItem(sinoKey(), JSON.stringify(L.map((a) => String(a.id))));
   } catch (e) {
   }
-  modal(`<h3>Avisos da escola</h3>${pessoais.map((a) => `<div style="padding:10px 0;border-bottom:1px solid #EFE6D0"><b>${esc(a.titulo)}</b><p>${esc(a.mensagem)}</p><button class="btn btn-gold btn-sm" data-card-download="${esc(a.curso_id)}">Baixar carteirinha PDF</button></div>`).join("")}${L.map((a) => {
+  modal(`<h3>Avisos da escola</h3>${"Notification" in window && Notification.permission !== "granted" ? '<div style="background:#FFF6DC;border:1px solid #C9A24A;border-radius:10px;padding:10px 12px;margin:6px 0 10px"><p style="margin:0 0 8px">Quer receber os avisos também na tela do celular?</p><button class="btn btn-gold btn-sm" id="sinoNotAtiva">Ativar notificações</button><div class="msg hidden" id="sinoNotMsg" style="margin-top:8px"></div></div>' : ""}${pessoais.map((a) => `<div style="padding:10px 0;border-bottom:1px solid #EFE6D0"><b>${esc(a.titulo)}</b><p>${esc(a.mensagem)}</p><button class="btn btn-gold btn-sm" data-card-download="${esc(a.curso_id)}">Baixar carteirinha PDF</button></div>`).join("")}${L.map((a) => {
     const eImg = /\.(jpe?g|png|webp|gif)(\?|#|$)/i.test(a.video_url || "");
     return `<div style="padding:10px 0;border-bottom:1px solid #EFE6D0"><b>${esc(a.titulo)}</b>${eImg ? `<a href="${esc(a.video_url)}" target="_blank" rel="noopener"><img src="${esc(a.video_url)}" alt="${esc(a.titulo)}" loading="lazy" style="display:block;width:100%;height:auto;border-radius:8px;margin:8px 0"></a>` : ""}<p style="white-space:pre-line">${etuLinkify(etuTextoSem(a.texto || ""))}</p>${a.video_url && !eImg ? `<a class="btn btn-gold btn-sm" href="${esc(a.video_url)}" target="_blank" rel="noopener">${/\.pdf(\?|#|$)/i.test(a.video_url) ? "Abrir o estudo em PDF" : "Abrir o link"}</a>` : ""}</div>`;
   }).join("")}${!L.length && !pessoais.length ? "<p>Nenhum aviso no momento.</p>" : ""}<div class="acts"><button class="btn btn-gold" data-close>Fechar</button></div>`);
+  const bsn = document.getElementById("sinoNotAtiva");
+  if (bsn) bsn.onclick = () => window.etuAtivarNotif(document.getElementById("sinoNotMsg"), () => {
+    if (Notification.permission === "granted") bsn.style.display = "none";
+  });
   try {
     if (!API.demo && uid) {
       await API.lerAvisos(pessoais.filter((a) => !a.lida_em).map((a) => a.id));
@@ -5646,8 +5650,43 @@ async function drawDivulgacao() {
     setTimeout(monta, 800);
   });
 })();
+window.etuAtivarNotif = async function(m, depois) {
+  function diz(c, t) {
+    if (m) {
+      m.className = "msg " + c;
+      m.textContent = t;
+    }
+  }
+  try {
+    if (!("Notification" in window)) {
+      diz("err", "Este aparelho ou navegador não permite notificações. No iPhone, primeiro adicione a escola à Tela de Início pelo Safari.");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      diz("err", "As notificações foram bloqueadas neste celular. Segure o dedo no ícone da ETU, toque em Informações do app, depois em Notificações, e ative.");
+      return;
+    }
+    var p = await Notification.requestPermission();
+    if (p === "granted") {
+      diz("ok", "Notificações ativadas. Os avisos da escola vão aparecer no sininho e na tela do celular.");
+      try {
+        var r2 = await navigator.serviceWorker.ready;
+        r2.showNotification("Escola Teológica União", { body: "Notificações ativadas. A paz do Senhor!", icon: "./icone-192.png", badge: "./selo-notif.png", tag: "etu-teste" });
+      } catch (e) {
+      }
+      try {
+        var kN = "etu_avisos_notif";
+        if (localStorage.getItem(kN) === null) localStorage.setItem(kN, "[]");
+      } catch (e) {
+      }
+    } else diz("info", "Permissão não concedida. Quando quiser, toque de novo em Ativar notificações.");
+  } catch (e) {
+    diz("err", "Não foi possível ativar agora. Tente de novo.");
+  }
+  if (depois) depois();
+};
 (function() {
-  var VERSAO = "Versão 35 · 26/11/2026";
+  var VERSAO = "Versão 48 · 27/11/2026";
   function estadoNotif() {
     if (!("Notification" in window)) return "não disponíveis neste aparelho";
     return Notification.permission === "granted" ? "ativadas ✓" : Notification.permission === "denied" ? "bloqueadas no celular" : "desativadas";
@@ -5661,9 +5700,17 @@ async function drawDivulgacao() {
     d.style.marginTop = "18px";
     d.style.color = "#1B2238";
     d.style.background = "#FFFDF6";
-    d.innerHTML = '<h3 style="margin:0 0 6px">Aplicativo</h3><p style="margin:0 0 4px;color:#5b6070;font-size:15.5px">' + VERSAO + '</p><p style="margin:0 0 12px;font-size:15.5px;color:#1B2238">Notificações: <b id="etuNotEst" style="color:#7A1B2B"></b></p><div class="res"><button type="button" class="btn btn-gold btn-sm" id="etuAtualiza">Procurar atualização</button><a class="btn btn-line btn-sm when-in" href="#aluno">Ativar notificações</a></div><div class="msg hidden" id="etuAtMsg" style="margin-top:10px"></div><details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">Configurações recomendadas no celular</summary><ol style="margin:8px 0 0;padding-left:20px;font-size:15.5px;line-height:1.55"><li>Segure o dedo no ícone da ETU e toque em <b>Informações do app</b> (ou no <b>i</b>).</li><li><b>Notificações</b>: deixe <b>ativadas</b>, para receber os avisos da escola.</li><li><b>Gerenciar o app fora de uso</b>: deixe <b>desligado</b>, para o celular não apagar as permissões nem esconder o aplicativo.</li><li><b>Abrir por padrão</b>: permita abrir os links da escola no aplicativo.</li><li>Se o ícone continuar antigo, desinstale o aplicativo e instale de novo pelo Chrome, no site da escola. Nada se perde: seus cursos ficam guardados na sua conta.</li></ol></details>';
+    d.innerHTML = '<h3 style="margin:0 0 6px">Aplicativo</h3><p style="margin:0 0 4px;color:#5b6070;font-size:15.5px">' + VERSAO + '</p><p style="margin:0 0 12px;font-size:15.5px;color:#1B2238">Notificações: <b id="etuNotEst" style="color:#7A1B2B"></b></p><div class="res"><button type="button" class="btn btn-gold btn-sm" id="etuAtualiza">Procurar atualização</button> <button type="button" class="btn btn-line btn-sm" id="etuNotAtiva">Ativar notificações</button></div><div class="msg hidden" id="etuAtMsg" style="margin-top:10px"></div><details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">Configurações recomendadas no celular</summary><ol style="margin:8px 0 0;padding-left:20px;font-size:15.5px;line-height:1.55"><li>Segure o dedo no ícone da ETU e toque em <b>Informações do app</b> (ou no <b>i</b>).</li><li><b>Notificações</b>: deixe <b>ativadas</b>, para receber os avisos da escola.</li><li><b>Gerenciar o app fora de uso</b>: deixe <b>desligado</b>, para o celular não apagar as permissões nem esconder o aplicativo.</li><li><b>Abrir por padrão</b>: permita abrir os links da escola no aplicativo.</li><li>Se o ícone continuar antigo, desinstale o aplicativo e instale de novo pelo Chrome, no site da escola. Nada se perde: seus cursos ficam guardados na sua conta.</li></ol></details>';
     v.appendChild(d);
     d.querySelector("#etuNotEst").textContent = estadoNotif();
+    var bn = d.querySelector("#etuNotAtiva");
+    if ("Notification" in window && Notification.permission === "granted") bn.style.display = "none";
+    bn.onclick = function() {
+      window.etuAtivarNotif(d.querySelector("#etuAtMsg"), function() {
+        d.querySelector("#etuNotEst").textContent = estadoNotif();
+        if (Notification.permission === "granted") bn.style.display = "none";
+      });
+    };
     d.querySelector("#etuAtualiza").onclick = async function() {
       var m = d.querySelector("#etuAtMsg");
       m.className = "msg info";
