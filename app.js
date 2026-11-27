@@ -257,6 +257,9 @@ function SupaBackend(){
     async salvarContaPagar(c){ return err(await sb.from('contas_pagar').insert(c).select('id').single()) },
     async alterarContaPagar(id,c){ err(await sb.from('contas_pagar').update(c).eq('id',id)) },
     async apagarContaPagar(id){ err(await sb.from('contas_pagar').delete().eq('id',id)) },
+    async declaracoesMei(){ return err(await sb.from('declaracoes_mei').select('*')) },
+    async salvarDeclaracaoMei(d){ err(await sb.from('declaracoes_mei').upsert(d)) },
+    async apagarDeclaracaoMei(a){ err(await sb.from('declaracoes_mei').delete().eq('ano_ref',a)) },
     async apagarLancamento(id){ err(await sb.from('lancamentos').delete().eq('id',id)) },
     async perguntarContador(msgs,modo='contabil'){ const {data,error}=await sb.functions.invoke('assistente',{body:{mensagens:msgs,modo}}); if(error) throw new Error('O assistente não respondeu agora. Tente novamente em instantes.'); if(data?.erro) throw new Error(data.erro); return data },
     async atualizarConta(d){ if(d&&d.nome&&!S.profile?.is_admin&&etuNomeReservado(d.nome,'')){ etuAlertaSeg('tentativa de trocar o nome da conta',d.nome,S.user?.email||'',S.profile?.telefone||'',etuNomeReservado(d.nome,'')); throw new Error('Este nome é reservado à Direção da Escola Teológica União.') } return this._atualizarConta(d) },
@@ -502,6 +505,9 @@ function DemoBackend(){
     async salvarContaPagar(c){ const L=await this.contasPagar(); const id=uid(); L.push({id,status:'aberto',criado_em:new Date().toISOString(),...c}); localStorage.setItem('etu_contas',JSON.stringify(L)); return {id} },
     async alterarContaPagar(id,c){ const L=(await this.contasPagar()).map(x=>String(x.id)===String(id)?{...x,...c}:x); localStorage.setItem('etu_contas',JSON.stringify(L)) },
     async apagarContaPagar(id){ const L=(await this.contasPagar()).filter(x=>String(x.id)!==String(id)); localStorage.setItem('etu_contas',JSON.stringify(L)) },
+    async declaracoesMei(){ try{return JSON.parse(localStorage.getItem('etu_dasn')||'[]')}catch(e){return []} },
+    async salvarDeclaracaoMei(d){ const L=(await this.declaracoesMei()).filter(x=>+x.ano_ref!==+d.ano_ref); L.push(d); localStorage.setItem('etu_dasn',JSON.stringify(L)) },
+    async apagarDeclaracaoMei(a){ const L=(await this.declaracoesMei()).filter(x=>+x.ano_ref!==+a); localStorage.setItem('etu_dasn',JSON.stringify(L)) },
     async perguntarContador(){ return {resposta:'A assessoria virtual ainda aguarda a conexão com o banco de dados e a ativação do serviço de inteligência artificial. Sua pergunta não foi enviada a um modelo de IA. Os manuais e as opções podem ser preparados antes da ativação.'} },
     async atualizarConta(d){ const u=me(); if(!u) throw new Error('Entre novamente.'); if(u.pw!==d.atual) throw new Error('A senha atual não confere.');
       if(d.email && db.users.some(x=>x.id!==u.id && x.email.toLowerCase()===d.email.toLowerCase())) throw new Error('Este e-mail já é usado por outra conta. A conta da Direção precisa de um e-mail só dela.');
@@ -1541,6 +1547,7 @@ async function drawContab(){
     }catch(e){r.textContent=e.message}finally{botao.disabled=false}
   };
   try{ window.etuContas=await API.contasPagar(); CX.contasErro='' }catch(e){ window.etuContas=null; CX.contasErro=e.message }
+  try{ window.etuDasnL=await API.declaracoesMei(); CX.dasnErro='' }catch(e){ window.etuDasnL=[]; CX.dasnErro=e.message }
   try{ etuFechamento(P,L) }catch(e){ console.log(e) }
 }
 function recibo(l){ if(!l) return; const w=window.open('','_blank'); if(!w) return; const n=l.documento||('R-'+String(l.id).slice(-6).toUpperCase());
@@ -2536,11 +2543,12 @@ function etuMesAnterior(){ const d=new Date(); d.setDate(1); d.setMonth(d.getMon
 function etuFechStatus(m){ try{ return JSON.parse(localStorage.getItem(etuFechKey(m))||'{}') }catch(e){ return {} } }
 function etuFechGrava(m,o){ try{ localStorage.setItem(etuFechKey(m),JSON.stringify(Object.assign(etuFechStatus(m),o))) }catch(e){} }
 function etuDasPago(L,m){ const x=(L||[]).find(l=>l.tipo==='saida'&&(l.documento||'').trim()==='DAS '+m); if(x) return fmtDate(x.data); return etuFechStatus(m).das||'' }
+function etuDasn(anoRef){ const d=(window.etuDasnL||[]).find(x=>+x.ano_ref===+anoRef); if(d) return d; const v=etuFechStatus(String(+anoRef+1)).dasn; return v?{ano_ref:+anoRef,enviada_em:null,legado:v}:null }
 function etuDiasPara(iso){ const a=new Date(today()+'T12:00:00'), b=new Date((iso||today())+'T12:00:00'); return Math.round((b-a)/864e5) }
 function etuPendencias(L){
   L=L||window.etuCxL||[]; const hoje=new Date(), dia=hoje.getDate(), ant=etuMesAnterior(), nm=MESES[+ant.slice(5)-1]+' de '+ant.slice(0,4), out=[];
   if(!etuDasPago(L,ant)) out.push({t:'Pagar e registrar o DAS do MEI de '+nm,p:dia<=20?'vence no dia 20; faltam '+(20-dia)+' dia(s)':'atrasado: emita a guia nova, com juros, no aplicativo MEI'});
-  if(hoje.getMonth()<=4 && !etuFechStatus(String(hoje.getFullYear())).dasn) out.push({t:'Enviar a Declaração Anual do MEI (DASN-SIMEI) do ano de '+(hoje.getFullYear()-1),p:'até 31 de maio'});
+  const anoRef=hoje.getFullYear()-1; if(!etuDasn(anoRef) && anoRef>=2025) out.push({t:'Enviar a Declaração Anual do MEI (DASN-SIMEI) do ano de '+anoRef,p:hoje.getMonth()<=4?'prazo até 31 de maio':'atrasada: o prazo era 31 de maio; envie já, a multa aumenta com o tempo'});
   (window.etuContas||[]).filter(c=>c.status!=='pago').forEach(c=>{ const d=etuDiasPara(c.vencimento); if(d<0) out.push({t:'Pagar '+(c.tipo||'boleto').toLowerCase()+': '+c.descricao+' ('+brl(numBR(c.valor))+')',p:'venceu em '+fmtDate(c.vencimento)+', há '+(-d)+' dia(s)'}); else if(d<=5) out.push({t:'Pagar '+(c.tipo||'boleto').toLowerCase()+': '+c.descricao+' ('+brl(numBR(c.valor))+')',p:d===0?'vence hoje':'vence em '+fmtDate(c.vencimento)+'; faltam '+d+' dia(s)'}) });
   return out;
 }
@@ -2567,9 +2575,7 @@ function etuFechamento(P,L){
       ${[...Array(new Date().getMonth()+1)].map((_,i)=>{ const k=ano+'-'+String(i+1).padStart(2,'0'), rec=L.filter(l=>l.tipo==='entrada'&&(l.data||'').startsWith(k)).reduce((x,l)=>x+numBR(l.valor),0), pg=etuDasPago(L,k), atual=i===new Date().getMonth();
         return `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;border:1px solid #eee;border-radius:8px;padding:8px 10px;font-size:15px"><b style="flex:1 1 90px">${MESES[i]}</b><span style="flex:0 0 auto">${brl(rec)}</span><span style="flex:1 1 100%;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${atual?'<span style="color:#5b6070;font-size:14px">DAS vence no dia 20 do mês seguinte</span>':pg?'<span style="color:#1F6B45;font-weight:700">✓ DAS pago</span>':`<button class="btn btn-line btn-sm" type="button" data-dasm="${k}">Registrar DAS</button>`}<button class="btn btn-line btn-sm" type="button" data-relm="${k}">Relatório PDF</button></span></div>` }).join('')}
       </div><p style="margin:8px 0 0;font-size:14px;color:#5b6070">Os pagamentos do DAS ficam guardados no caixa da escola e aparecem em qualquer aparelho em que a Direção entrar.</p></div>
-    <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff"><b>3. Declaração anual (DASN-SIMEI)</b> — ${etuFechStatus(ano).dasn?`<span class="pill on">Enviada em ${esc(etuFechStatus(ano).dasn)}</span>`:'<span class="pill lock">Até 31 de maio</span>'}
-      <p style="margin:6px 0 8px;font-size:15px">Uma vez por ano, até 31 de maio, informe o faturamento total do ano anterior. O resumo abaixo soma os 12 meses do caixa para facilitar o preenchimento.</p>
-      <div class="res"><button class="btn btn-line btn-sm" type="button" id="fechAno">Gerar resumo do ano anterior</button><button class="btn btn-line btn-sm" type="button" id="fechDasn">${etuFechStatus(ano).dasn?'Desmarcar':'Marcar declaração como enviada'}</button></div></div>
+    <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff" id="etuDasnCard"></div>
     <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff"><b>4. Nota fiscal</b>
       <p style="margin:6px 0 0;font-size:15px">O MEI emite nota fiscal de serviço quando o pagador é empresa (CNPJ) ou quando o aluno pedir. Ao lançar uma entrada com nota, escreva no campo Documento o número começando por “NF” (ex.: NF 123); o relatório separa sozinho as receitas com e sem nota.</p></div>
     <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff" id="etuArqComp"><b>5. Arquivo de comprovantes</b>
@@ -2619,7 +2625,24 @@ function etuFechamento(P,L){
   $('#arqAno').onchange=arqLista; arqLista();
   etuContasDesenha(L,nm);
   d.querySelectorAll('[data-dasm]').forEach(b=>b.onclick=()=>{ const v=prompt('Valor pago do DAS de '+nm(b.dataset.dasm)+' (R$):'); if(v===null) return; const dt=prompt('Data do pagamento (dia/mês/ano):',new Date().toLocaleDateString('pt-BR')); if(dt===null) return; const q=dt.split('/'); const iso=q.length===3?q[2]+'-'+q[1].padStart(2,'0')+'-'+q[0].padStart(2,'0'):today(); regDas(b.dataset.dasm,v,iso,null) });
-  $('#fechDasn').onclick=()=>{ const s2=etuFechStatus(ano); etuFechGrava(ano,{dasn:s2.dasn?'':new Date().toLocaleDateString('pt-BR')}); drawContab() };
+  (function dasnCard(){ const box=$('#etuDasnCard'); if(!box) return; const hoje=new Date(), ref=hoje.getFullYear()-1, d=etuDasn(ref), hist=(window.etuDasnL||[]).filter(x=>+x.ano_ref!==ref).sort((a,b)=>b.ano_ref-a.ano_ref);
+    const atras=!d&&hoje.getMonth()>4;
+    box.innerHTML=`<b>3. Declaração anual do MEI (DASN-SIMEI) — ano de ${ref}</b> ${d?`<span class="pill on">Em dia</span>`:atras?'<span class="pill off">Atrasada</span>':'<span class="pill lock">Até 31 de maio</span>'}
+      ${d?`<div style="background:#EAF5EC;border:1px solid #A7D3B1;border-radius:10px;padding:10px 14px;margin:8px 0"><b style="color:#1E5E33">✓ Declaração do ano de ${ref} enviada${d.enviada_em?' em '+fmtDate(d.enviada_em):d.legado?' em '+esc(d.legado):''}.</b><div style="font-size:14.5px;margin-top:2px">Obrigação cumprida. A próxima será a do ano de ${ref+1}, de 1º de janeiro a 31 de maio de ${ref+2}.</div>
+        <div class="res" style="margin-top:6px">${d.recibo?'<button class="btn btn-navy btn-sm" type="button" id="dasnVer">Ver recibo da declaração</button>':'<button class="btn btn-line btn-sm" type="button" id="dasnAnexar">Anexar recibo da declaração</button>'}<button class="btn btn-line btn-sm" type="button" id="dasnDesf">Desfazer</button></div></div>`
+       :`<p style="margin:6px 0 8px;font-size:15px">Uma vez por ano, de janeiro até 31 de maio, informe no Portal do Empreendedor o faturamento total do ano anterior. O botão “Gerar resumo” soma os 12 meses do caixa para facilitar. Depois de enviar, registre aqui com o recibo: o aviso some e o quadro fica verde.</p>
+        <div class="grid2"><div><label for="dasnData">Data do envio</label><input id="dasnData" type="date" value="${today()}"></div><div><label for="dasnArq">Recibo da declaração (PDF ou foto)</label><input id="dasnArq" type="file" accept="application/pdf,image/*"></div></div>
+        <div class="msg hidden" id="mDasn"></div><div class="res"><button class="btn btn-gold btn-sm" type="button" id="dasnReg">Registrar declaração enviada</button><a class="btn btn-line btn-sm" href="https://www.gov.br/empresas-e-negocios/pt-br/empreendedor" target="_blank" rel="noopener">Abrir o Portal do Empreendedor</a></div>`}
+      <div class="res" style="margin-top:6px"><button class="btn btn-line btn-sm" type="button" id="fechAno">Gerar resumo do ano de ${ref}</button></div>
+      ${hist.length?`<div style="margin-top:8px;font-size:14.5px"><b>Declarações anteriores:</b> ${hist.map(h=>`${h.ano_ref} ✓${h.recibo?` <a href="#" data-dasnrec="${h.ano_ref}">recibo</a>`:''}`).join(' · ')}</div>`:''}
+      ${CX.dasnErro?`<p style="margin:6px 0 0;font-size:13.5px;color:#7A1B2B">Para guardar a declaração no banco de dados, rode o arquivo 12_declaracao_mei.sql no Supabase.</p>`:''}`;
+    const reg=$('#dasnReg'); if(reg) reg.onclick=async()=>{ const m=$('#mDasn'); reg.disabled=true; try{ const f=$('#dasnArq').files&&$('#dasnArq').files[0]; let rec=null; if(f){ show(m,'Enviando o recibo…','ok'); rec=await etuEnviarComprovante(f,($('#dasnData').value||today()).slice(0,7)) }
+        await API.salvarDeclaracaoMei({ano_ref:ref,enviada_em:$('#dasnData').value||today(),recibo:rec}); drawContab() }catch(e){ reg.disabled=false; show(m,e.message,'err') } };
+    const ver=$('#dasnVer'); if(ver) ver.onclick=()=>etuAbrirComprovante(d.recibo);
+    const an=$('#dasnAnexar'); if(an) an.onclick=()=>etuPedirArquivo(async f=>{ an.disabled=true; an.textContent='Enviando…'; try{ const rec=await etuEnviarComprovante(f,today().slice(0,7)); await API.salvarDeclaracaoMei({ano_ref:ref,enviada_em:d.enviada_em||today(),recibo:rec}); drawContab() }catch(e){ alert(e.message); an.disabled=false; an.textContent='Anexar recibo da declaração' } });
+    const des=$('#dasnDesf'); if(des) des.onclick=()=>confirmBox('Desfazer o registro da declaração de '+ref+'?',async()=>{ try{ await API.apagarDeclaracaoMei(ref) }catch(e){} etuFechGrava(String(ref+1),{dasn:''}); drawContab() });
+    box.querySelectorAll('[data-dasnrec]').forEach(a=>a.onclick=e=>{ e.preventDefault(); const h=hist.find(x=>String(x.ano_ref)===a.dataset.dasnrec); if(h&&h.recibo) etuAbrirComprovante(h.recibo) });
+  })();
   $('#fechAno').onclick=()=>{ const a=String(+ano-1); const E=ent(L.filter(l=>(l.data||'').startsWith(a)));
     const w=window.open('','_blank'); if(!w) return;
     const ms=[...Array(12)].map((_,i)=>{ const k=a+'-'+String(i+1).padStart(2,'0'); const x=E.filter(l=>l.data.startsWith(k)); return [k,sum(x.filter(l=>!comNF(l))),sum(x.filter(comNF))] });
@@ -2697,6 +2720,7 @@ function etuContasDesenha(L,nm){
   function avisa(){
     if(!(S.profile&&S.profile.is_admin)) return; if(location.hash!=='#admin') return;
     if(!window.etuCxL){ API.lancamentos().then(L=>{ window.etuCxL=L||[]; avisa() }).catch(()=>{}); return }
+    if(window.etuDasnL===undefined){ window.etuDasnL=[]; API.declaracoesMei().then(D=>{ window.etuDasnL=D||[]; avisa() }).catch(()=>{}); return }
     if(window.etuContas===undefined){ window.etuContas=null; API.contasPagar().then(C=>{ window.etuContas=C||[]; avisa() }).catch(()=>{}); return }
     const pend=etuPendencias(), v=document.querySelector('[data-view="admin"] .wrap'); if(!v) return;
     let b=document.getElementById('etuAvisoCont'); if(!pend.length){ if(b) b.remove(); return }
