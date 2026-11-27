@@ -4306,6 +4306,13 @@ const FAQ = [
   [/(termo|contrato|privacidade|lgpd|desist|cancel|reembols|devolu|arrepend)/i, () => `Os Termos de Uso e a Política de Privacidade estão no rodapé do site (escolateologicauniao.github.io/termos.html e /privacidade.html). Em resumo: os cursos são livres, sem reconhecimento do MEC; você pode desistir em até 7 dias após o pagamento e receber todo o valor de volta; depois disso, valem as regras de cancelamento dos Termos. Os seus dados são usados só para o funcionamento do curso, não são vendidos, e você pode pedir a exclusão da conta.`],
   [/(celular|computador|notebook|tablet|funciona (no|em|onde)|instalar|baixar o (app|aplicativo))/i, () => `A plataforma funciona no celular, no tablet e no computador, pelo endereço escolateologicauniao.github.io. No celular, abra o endereço no Chrome, toque nos 3 pontinhos e em “Adicionar à tela inicial” (ou “Instalar app”): o ícone da escola aparece na tela, com os avisos do sininho.`],
   [/(golpe|falso|fake|canais oficiais|site oficial)/i, () => `Os canais oficiais da escola são o site escolateologicauniao.github.io, o WhatsApp ${CONFIG.WHATSAPP} e o e-mail ${CONFIG.EMAIL || "etu.escolateologicauniao215@gmail.com"}. A escola nunca pede senha. Antes de qualquer Pix, confira no aplicativo do banco se o recebedor é a Escola Teológica União. Na dúvida, fale com a direção.`],
+  [/(disciplina|mat[ée]ria|grade|o que (vou|vamos) (aprender|estudar))/i, () => `Curso Básico: Introdução à Teologia, Bibliologia, Teologia Propriamente Dita, Cristologia, Pneumatologia, Angelologia, Antropologia Bíblica, Hamartiologia, Soteriologia, Eclesiologia e Escatologia.
+
+Curso Médio: Hermenêutica Bíblica, Panorama do Antigo e do Novo Testamento, Geografia Bíblica, História de Israel, História da Igreja, Homilética, Ética Cristã, Evangelismo e Missões e Educação Cristã.
+
+Curso Avançado: Exegese Bíblica, Teologia Contemporânea, Filosofia e Fé Cristã, Teologia do Antigo e do Novo Testamento, Apologética Cristã, Seitas e Heresias, Teologia Pentecostal, Patrística, Teologia Pastoral e Liderança e Administração Eclesiástica.
+
+Na página “Cursos”, toque em “Ver disciplinas” para ler o resumo de cada uma.`],
   [/^(?!.*(matr[ií]cul|pix|pag|comprovante|certificad)).*(curso|n[íi]vel|b[áa]sico|m[ée]dio|avan[çc]ado|disciplin)/i, () => `A escola oferece o Curso Básico, o Curso Médio e o Curso Avançado de Teologia, cursos livres de formação bíblica, teológica e ministerial. A formação começa pelo Básico (os fundamentos da fé e as grandes doutrinas), segue para o Médio (interpretação da Bíblia, história da Igreja e preparo para o ensino) e termina no Avançado (Teologia Sistemática, defesa da fé e pregação). Na página “Cursos”, toque em “Ver disciplinas” para conhecer a grade de cada nível. Há aula grátis, Biblioteca Grátis e o Desafio Bíblico para experimentar. Ao concluir, o aluno recebe certificado com código de verificação e carteirinha de estudante.`],
   [/matr[ií]cul|inscri|valor|pre[çc]o|pagar|pagamento|pix/i, () => window.ETU_LOJA ? `Este aplicativo é o ambiente de estudo dos alunos. Para dúvidas sobre a sua matrícula, fale com a direção da escola pelo botão “Falar com a direção”.` : `Para se matricular, abra a página “Matrícula”, escolha o curso (Básico, Médio ou Avançado) e faça o Pix para a chave (telefone) ${CONFIG.PIX_CHAVE}. Depois envie o comprovante pela plataforma ou pelo WhatsApp ${CONFIG.WHATSAPP}. A direção confere e libera o curso completo.`],
   [/senha|esqueci|n[ãa]o consigo entrar|login|acessar/i, () => `Na tela “Área do Aluno”, toque em “Esqueci a senha”, informe o seu e-mail e siga o link que chegar na sua caixa de entrada (confira também o spam). Para ver o que está digitando, toque em “Mostrar”, ao lado do campo da senha.`],
@@ -4326,7 +4333,48 @@ function aiAdd(t, quem) {
   d.textContent = t;
   $("#aiMsgs").appendChild(d);
   $("#aiMsgs").scrollTop = 1e9;
+  if (quem === "eu") aiParaInatividade();
+  else if (t !== "Escrevendo…") aiAgendaInatividade();
   return d;
+}
+let aiInatTimer = null;
+const AI_INAT_MIN = 3;
+function aiParaInatividade() {
+  clearTimeout(aiInatTimer);
+  aiInatTimer = null;
+}
+function aiAgendaInatividade() {
+  aiParaInatividade();
+  aiInatTimer = setTimeout(aiAvisoInatividade, AI_INAT_MIN * 60 * 1e3);
+}
+function aiAvisoInatividade() {
+  const box = $("#aiBox");
+  if (!box || box.classList.contains("hidden") || $("#aiMsgs .ai-inat")) return;
+  const d = document.createElement("div");
+  d.className = "ai-m bot ai-inat";
+  d.innerHTML = '<p style="margin:0 0 6px">Percebemos que você ficou alguns minutos sem responder. Talvez esteja ocupado(a), e está tudo bem!</p><p style="margin:0 0 10px">Seguimos aqui, à sua disposição, para quando desejar continuar. Deseja prosseguir com o atendimento?</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-gold btn-sm" data-inat="cont">Continuar a conversa</button><button type="button" class="btn btn-line btn-sm" data-inat="fim">Encerrar o atendimento</button></div>';
+  $("#aiMsgs").appendChild(d);
+  $("#aiMsgs").scrollTop = 1e9;
+  d.querySelector('[data-inat="cont"]').onclick = () => {
+    d.querySelector("div").remove();
+    d.classList.remove("ai-inat");
+    aiAdd("Que bom ter você conosco! Pode escrever a sua pergunta ou escolher uma das opções.", "bot");
+    const s = $("#aiSug");
+    if (s && !s.children.length) {
+      s.innerHTML = ["Conhecer os cursos", "Como faço a matrícula?", "Falar com a direção"].map((x) => `<button type="button">${x}</button>`).join("");
+      $$("#aiSug button").forEach((b) => b.onclick = () => {
+        $("#aiTxt").value = b.textContent;
+        aiEnviar();
+      });
+    }
+  };
+  d.querySelector('[data-inat="fim"]').onclick = () => {
+    d.querySelector("div").remove();
+    d.classList.remove("ai-inat");
+    aiParaInatividade();
+    aiAdd("Agradecemos o seu contato! Foi uma alegria servi-lo(a). “O SENHOR te abençoe e te guarde” (Números 6.24). Sempre que desejar, estaremos aqui: é só tocar em AJUDA. A paz do Senhor! 🙏", "bot");
+    aiParaInatividade();
+  };
 }
 function aiAjusta() {
   if (innerWidth > 700 || !window.visualViewport) {
@@ -4344,7 +4392,7 @@ if (window.visualViewport) {
   visualViewport.addEventListener("scroll", aiAjusta);
 }
 async function aiAbrir() {
-  var _a, _b, _c;
+  var _a, _b;
   $("#aiBox").classList.remove("hidden");
   document.body.classList.add("ai-aberto");
   aiAjusta();
@@ -4359,7 +4407,11 @@ async function aiAbrir() {
   }
   etuAvatar(((_b = AI.cfg) == null ? void 0 : _b.foto) || "");
   if (!$("#aiMsgs").children.length) {
-    aiAdd(`A paz do Senhor! Sou o ${((_c = AI.cfg) == null ? void 0 : _c.nome) || "Assistente ETU"}, o assistente virtual da Escola Teológica União. Respondo conforme as orientações preparadas pela Direção da escola (Pr. Charlei de Jesus Lima Dias). Escolha uma opção abaixo ou escreva a sua pergunta:`, "bot");
+    aiAdd(`A paz do Senhor! Seja bem-vindo(a) à Escola Teológica União, dirigida pelo Pr. Charlei de Jesus Lima Dias.
+
+Você sabe o que é teologia e como ela fortalece a vida e o ministério? Aqui você estuda Bibliologia, Teologia Propriamente Dita, Cristologia, Pneumatologia, Hamartiologia, Soteriologia e muito mais, sempre com a Bíblia como única regra de fé e prática.
+
+Escolha uma opção abaixo ou escreva a sua pergunta:`, "bot");
     $("#aiSug").innerHTML = ["Conhecer os cursos", "Como faço a matrícula?", "Já fiz o curso básico em outra escola", "Funciona no celular e no computador?", "Aplicativo na Google Play", "Termos e privacidade", "Certificado e carteirinha", "Esqueci a minha senha"].map((x) => `<button type="button">${x}</button>`).join("");
     $$("#aiSug button").forEach((b) => b.onclick = () => {
       $("#aiTxt").value = b.textContent;
@@ -4396,6 +4448,7 @@ async function aiEnviar() {
 }
 $("#aiOpen").onclick = () => $("#aiBox").classList.contains("hidden") ? aiAbrir() : ($("#aiBox").classList.add("hidden"), document.body.classList.remove("ai-aberto"), $("#aiOpen").setAttribute("aria-expanded", "false"));
 $("#aiClose").onclick = () => {
+  aiParaInatividade();
   $("#aiBox").classList.add("hidden");
   document.body.classList.remove("ai-aberto");
   $("#aiOpen").setAttribute("aria-expanded", "false");
@@ -4513,6 +4566,7 @@ $("#aiTxt").addEventListener("focus", () => {
   setTimeout(aiAjusta, 300);
 });
 $("#aiTxt").addEventListener("input", () => {
+  if (aiInatTimer) aiAgendaInatividade();
   const t = $("#aiTxt");
   t.style.height = "auto";
   t.style.height = Math.min(t.scrollHeight, 110) + "px";
