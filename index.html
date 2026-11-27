@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap">
 <script src="config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-etu.js"></script>
 <style>
 :root{
   --navy:#0F1E3D; --navy2:#16294F; --navy3:#1E3463;
@@ -1585,5 +1585,13 @@ footer .legal{margin-top:30px;padding-top:18px;border-top:1px solid rgba(201,162
 
 <script src="qr.js"></script>
 <script src="app.js"></script>
+<script>
+(function(){
+  var ok=true, txt='';
+  try{ localStorage.setItem('etu_t','1'); localStorage.removeItem('etu_t') }catch(e){ ok=false; txt='Este navegador está bloqueando o armazenamento de dados, e por isso não é possível entrar na sua conta. No iPhone: abra Ajustes &gt; Safari e desative <b>Bloquear Todos os Cookies</b>; se estiver em <b>Navegação Privada</b>, abra uma aba normal.' }
+  if(ok && typeof API==='undefined' && !document.querySelector('[role="alert"].msg.err')){ ok=false; txt='Este aparelho não conseguiu abrir a plataforma. Atualize o sistema do celular (no iPhone: Ajustes &gt; Geral &gt; Atualização de Software) ou abra pelo navegador Safari ou Chrome atualizado. Se continuar, fale com a escola pelo WhatsApp (61) 99521-1432.' }
+  if(!ok){ var d=document.createElement('p'); d.setAttribute('role','alert'); d.style.cssText='margin:0;padding:14px 16px;background:#FBF0E4;color:#7A1F2B;border-bottom:3px solid #B3261E;font:17px/1.45 Georgia,serif;text-align:center'; d.innerHTML=txt; document.body.insertBefore(d,document.body.firstChild) }
+})();
+</script>
 </body>
 </html>
