@@ -247,7 +247,12 @@ function SupaBackend(){
     async apagarCanal(id){ err(await sb.from('canais_oficiais').delete().eq('id',id)) },
     async perguntarDirecao(msgs){ const {data,error}=await sb.functions.invoke('assistente',{body:{mensagens:msgs,modo:'direcao'}}); if(error) throw new Error('O assistente não respondeu agora. Tente novamente em instantes.'); if(data?.erro) throw new Error(data.erro); return data },
     async lancamentos(){ return err(await sb.from('lancamentos').select('*').order('data',{ascending:false}).limit(5000)) },
-    async salvarLancamento(l){ err(await sb.from('lancamentos').insert(l)) },
+    async salvarLancamento(l){ return err(await sb.from('lancamentos').insert(l).select('id').single()) },
+    async anexarCaixa(file,mes){ const m=/^\d{4}-\d{2}$/.test(mes||'')?mes:today().slice(0,7); const ext=((file.name||'').split('.').pop()||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,5)||(file.type==='application/pdf'?'pdf':'jpg');
+      const nome=m.slice(0,4)+'/'+m.slice(5,7)+'/'+Date.now()+'-'+Math.random().toString(36).slice(2,8)+'.'+ext;
+      err(await sb.storage.from('caixa').upload(nome,file,{contentType:file.type||'application/octet-stream',upsert:false})); return nome },
+    async linkCaixa(nome,baixar){ return err(await sb.storage.from('caixa').createSignedUrl(nome,300,baixar?{download:true}:undefined)).signedUrl },
+    async anexoLancamento(id,nome){ err(await sb.from('lancamentos').update({anexo:nome}).eq('id',id)) },
     async apagarLancamento(id){ err(await sb.from('lancamentos').delete().eq('id',id)) },
     async perguntarContador(msgs,modo='contabil'){ const {data,error}=await sb.functions.invoke('assistente',{body:{mensagens:msgs,modo}}); if(error) throw new Error('O assistente não respondeu agora. Tente novamente em instantes.'); if(data?.erro) throw new Error(data.erro); return data },
     async atualizarConta(d){ if(d&&d.nome&&!S.profile?.is_admin&&etuNomeReservado(d.nome,'')){ etuAlertaSeg('tentativa de trocar o nome da conta',d.nome,S.user?.email||'',S.profile?.telefone||'',etuNomeReservado(d.nome,'')); throw new Error('Este nome é reservado à Direção da Escola Teológica União.') } return this._atualizarConta(d) },
@@ -486,6 +491,9 @@ function DemoBackend(){
     async lancamentos(){ try{return JSON.parse(localStorage.getItem('etu_caixa')||'[]')}catch(e){return []} },
     async salvarLancamento(l){ const L=await this.lancamentos(); L.unshift({id:uid(),criado_em:new Date().toISOString(),...l}); localStorage.setItem('etu_caixa',JSON.stringify(L)) },
     async apagarLancamento(id){ const L=(await this.lancamentos()).filter(x=>x.id!==id); localStorage.setItem('etu_caixa',JSON.stringify(L)) },
+    async anexarCaixa(){ throw new Error('Os comprovantes ficam guardados no banco de dados da escola. Entre pela plataforma ligada ao banco.') },
+    async linkCaixa(){ return '' },
+    async anexoLancamento(){ throw new Error('Os comprovantes ficam guardados no banco de dados da escola.') },
     async perguntarContador(){ return {resposta:'A assessoria virtual ainda aguarda a conexão com o banco de dados e a ativação do serviço de inteligência artificial. Sua pergunta não foi enviada a um modelo de IA. Os manuais e as opções podem ser preparados antes da ativação.'} },
     async atualizarConta(d){ const u=me(); if(!u) throw new Error('Entre novamente.'); if(u.pw!==d.atual) throw new Error('A senha atual não confere.');
       if(d.email && db.users.some(x=>x.id!==u.id && x.email.toLowerCase()===d.email.toLowerCase())) throw new Error('Este e-mail já é usado por outra conta. A conta da Direção precisa de um e-mail só dela.');
@@ -1430,6 +1438,20 @@ const CX_CAT={entrada:['Mensalidades','Matrículas','Venda de apostilas e livros
 const brl=v=>(+v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const numBR=v=>{ if(typeof v==='number') return v; const t=String(v||'').replace(/[^\d,.-]/g,''); return +(t.includes(',')?t.replace(/\./g,'').replace(',','.'):t)||0 };
 const CX={mes:today().slice(0,7)};
+/* Comprovantes do caixa: fotos são reduzidas antes do envio; PDF vai como está (até 10 MB) */
+async function etuPrepArquivo(f){
+  if(!f) return null;
+  if(f.type==='application/pdf'){ if(f.size>10*1024*1024) throw new Error('O PDF passa de 10 MB. Envie um arquivo menor.'); return f }
+  if(!/^image\//.test(f.type)) throw new Error('Envie uma foto ou um arquivo PDF.');
+  if(f.size<=1.5*1024*1024 && /jpe?g|png|webp/.test(f.type)) return f;
+  try{ const img=await new Promise((ok,no)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=no; i.src=URL.createObjectURL(f) });
+    const k=Math.min(1,1800/Math.max(img.width,img.height)); const c=document.createElement('canvas'); c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height); const b=await new Promise(ok=>c.toBlob(ok,'image/jpeg',0.85));
+    if(b) return new File([b],(f.name||'comprovante').replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg'}) }catch(e){}
+  if(f.size>10*1024*1024) throw new Error('A foto passa de 10 MB.'); return f }
+async function etuEnviarComprovante(f,mes){ const a=await etuPrepArquivo(f); return a?await API.anexarCaixa(a,mes):null }
+async function etuAbrirComprovante(nome){ const w=window.open('','_blank'); try{ const u=await API.linkCaixa(nome); if(!u) throw new Error('Arquivo não encontrado.'); if(w) w.location.href=u; else location.href=u }catch(e){ if(w) w.close(); alert('Não foi possível abrir o comprovante: '+e.message) } }
+function etuPedirArquivo(cb){ const i=document.createElement('input'); i.type='file'; i.accept='application/pdf,image/*'; i.onchange=()=>{ if(i.files&&i.files[0]) cb(i.files[0]) }; i.click() }
 async function drawContab(){
   const P=$('#contabPanel'); if(!P) return;
   let L=[]; try{ L=await API.lancamentos() }catch(e){ P.innerHTML=`<div class="msg err">Não foi possível abrir o caixa: ${esc(e.message)}. Se a plataforma já estiver ativada, rode de novo o arquivo de banco de dados atualizado.</div>`; return }
@@ -1465,8 +1487,10 @@ async function drawContab(){
      <div><label for="cxForma">Forma</label><select id="cxForma"><option>Pix</option><option>Dinheiro</option><option>Transferência</option><option>Cartão</option><option>Boleto</option></select></div>
      <div><label for="cxDoc">Documento (nº do recibo, nota ou comprovante)</label><input id="cxDoc"></div></div>
     <label for="cxDesc">Descrição (de quem recebeu ou a quem pagou, e o motivo)</label><input id="cxDesc">
+    <label for="cxArq">Comprovante (foto ou PDF) — opcional, mas recomendado</label><input id="cxArq" type="file" accept="application/pdf,image/*">
+    <p style="margin:4px 0 0;font-size:14px;color:var(--muted)">O arquivo fica guardado no arquivo de comprovantes da escola, organizado por ano e mês. Só a Direção vê.</p>
     <div class="msg hidden" id="mCx"></div><div class="res"><button class="btn btn-gold" id="cxAdd" type="button">Registrar no caixa</button></div></div>
-   <div class="cx-sec"><h4>Lançamentos de ${esc(nomeMes(mes))}</h4>${doMes.length?`<div class="tbl-wrap"><table><thead><tr><th>Data</th><th>Tipo</th><th>Categoria e descrição</th><th>Valor</th><th></th></tr></thead><tbody>${doMes.slice().sort((a,b)=>a.data<b.data?-1:1).map(l=>`<tr><td>${fmtDate(l.data)}</td><td><span class="pill ${l.tipo==='entrada'?'ok':'off'}">${l.tipo==='entrada'?'Entrada':'Saída'}</span></td><td><b>${esc(l.categoria)}</b><br><span style="font-size:14px;color:var(--muted)">${esc(l.descricao||'')}${l.forma?' · '+esc(l.forma):''}${l.documento?' · doc. '+esc(l.documento):''}</span></td><td>${brl(numBR(l.valor))}</td><td style="white-space:nowrap">${l.tipo==='entrada'?`<button class="btn btn-line btn-sm" data-recibo="${esc(l.id)}" type="button">Recibo</button> `:''}<button class="btn btn-red btn-sm" data-dellc="${esc(l.id)}" type="button">Apagar</button></td></tr>`).join('')}</tbody></table></div>`:'<p style="margin:0;color:var(--muted)">Nenhum lançamento neste mês.</p>'}</div>
+   <div class="cx-sec"><h4>Lançamentos de ${esc(nomeMes(mes))}</h4>${doMes.length?`<div class="tbl-wrap"><table><thead><tr><th>Data</th><th>Tipo</th><th>Categoria e descrição</th><th>Valor</th><th></th></tr></thead><tbody>${doMes.slice().sort((a,b)=>a.data<b.data?-1:1).map(l=>`<tr><td>${fmtDate(l.data)}</td><td><span class="pill ${l.tipo==='entrada'?'ok':'off'}">${l.tipo==='entrada'?'Entrada':'Saída'}</span></td><td><b>${esc(l.categoria)}</b><br><span style="font-size:14px;color:var(--muted)">${esc(l.descricao||'')}${l.forma?' · '+esc(l.forma):''}${l.documento?' · doc. '+esc(l.documento):''}</span></td><td>${brl(numBR(l.valor))}</td><td style="white-space:nowrap">${l.anexo?`<button class="btn btn-navy btn-sm" data-vercomp="${esc(l.id)}" type="button">Ver comprovante</button> `:`<button class="btn btn-line btn-sm" data-anexar="${esc(l.id)}" type="button">Anexar comprovante</button> `}${l.tipo==='entrada'?`<button class="btn btn-line btn-sm" data-recibo="${esc(l.id)}" type="button">Recibo</button> `:''}<button class="btn btn-red btn-sm" data-dellc="${esc(l.id)}" type="button">Apagar</button></td></tr>`).join('')}</tbody></table></div>`:'<p style="margin:0;color:var(--muted)">Nenhum lançamento neste mês.</p>'}</div>
    ${Object.keys(porCat).length?`<div class="cx-sec"><h4>Resumo por categoria</h4><div class="tbl-wrap"><table><tbody>${Object.entries(porCat).sort().map(([k,v])=>`<tr><td>${esc(k)}</td><td style="text-align:right">${brl(v)}</td></tr>`).join('')}</tbody></table></div></div>`:''}
    <div class="cx-sec"><h4>O ano de ${ano}, mês a mês</h4><div class="tbl-wrap"><table><thead><tr><th>Mês</th><th>Entradas</th><th>Saídas</th><th>Resultado</th></tr></thead><tbody>${meses.map(([k,e,s])=>`<tr><td>${esc(MESES[+k.slice(5)-1])}</td><td>${brl(e)}</td><td>${brl(s)}</td><td style="color:${e-s<0?'#7A1B2B':'inherit'}">${brl(e-s)}</td></tr>`).join('')}<tr><td><b>Total</b></td><td><b>${brl(entA)}</b></td><td><b>${brl(saiA)}</b></td><td><b>${brl(entA-saiA)}</b></td></tr></tbody></table></div></div>
    <div class="cx-sec"><h4>Mensalidades vencidas e a vencer (próximos 7 dias)</h4>${venc.length?`<div class="tbl-wrap"><table><thead><tr><th>Aluno</th><th>Curso</th><th>Vencimento</th><th>Situação</th><th></th></tr></thead><tbody>${venc.sort((x,y)=>x.m.expira_em<y.m.expira_em?-1:1).map(v=>{ const tel=String(v.a.telefone||'').replace(/\D/g,''); const msg=`A paz do Senhor, ${v.a.nome||''}. Aqui é da Escola Teológica União. Lembramos que a mensalidade do ${curso(v.m.curso_id)?.titulo||'curso'} ${v.s==='vencida'?'venceu em':'vence em'} ${fmtDate(v.m.expira_em)}. O Pix é ${CONFIG.PIX_CHAVE}. Deus abençoe.`;
@@ -1481,7 +1505,13 @@ async function drawContab(){
   const cat=$('#cxCat'), tp=$('#cxTipo'); const fc=()=>cat.innerHTML=CX_CAT[tp.value].map(c=>`<option>${esc(c)}</option>`).join(''); tp.onchange=fc; fc();
   $('#cxMes').onchange=e=>{ CX.mes=e.target.value||today().slice(0,7); drawContab() };
   $('#cxAdd').onclick=async()=>{ const m=$('#mCx'); const v=numBR($('#cxValor').value); if(!(v>0)) return show(m,'Digite o valor.','err'); if(!$('#cxData').value) return show(m,'Escolha a data.','err');
-    try{ await API.salvarLancamento({tipo:tp.value,data:$('#cxData').value,categoria:cat.value,descricao:$('#cxDesc').value.trim(),valor:v,forma:$('#cxForma').value,documento:$('#cxDoc').value.trim()}); CX.mes=$('#cxData').value.slice(0,7); drawContab() }catch(e){ show(m,e.message,'err') } };
+    const bt=$('#cxAdd'); bt.disabled=true;
+    try{ const f=$('#cxArq').files&&$('#cxArq').files[0]; let anexo=null; if(f){ show(m,'Enviando o comprovante…','ok'); anexo=await etuEnviarComprovante(f,$('#cxData').value.slice(0,7)) }
+      const reg={tipo:tp.value,data:$('#cxData').value,categoria:cat.value,descricao:$('#cxDesc').value.trim(),valor:v,forma:$('#cxForma').value,documento:$('#cxDoc').value.trim()}; if(anexo) reg.anexo=anexo;
+      await API.salvarLancamento(reg); CX.mes=$('#cxData').value.slice(0,7); drawContab() }catch(e){ bt.disabled=false; show(m,e.message,'err') } };
+  $$('#contabPanel [data-vercomp]').forEach(b=>b.onclick=()=>{ const l=L.find(x=>String(x.id)===b.dataset.vercomp); if(l&&l.anexo) etuAbrirComprovante(l.anexo) });
+  $$('#contabPanel [data-anexar]').forEach(b=>b.onclick=()=>etuPedirArquivo(async f=>{ const l=L.find(x=>String(x.id)===b.dataset.anexar); if(!l) return; b.disabled=true; b.textContent='Enviando…';
+    try{ const n=await etuEnviarComprovante(f,(l.data||today()).slice(0,7)); await API.anexoLancamento(l.id,n); drawContab() }catch(e){ b.disabled=false; b.textContent='Anexar comprovante'; alert(e.message) } }));
   $$('#contabPanel [data-lancar]').forEach(b=>b.onclick=async()=>{ const c=C.find(x=>String(x.id)===b.dataset.lancar); const a=alunos.find(x=>x.id===c.user_id)||{};
     await API.salvarLancamento({tipo:'entrada',data:(c.criado_em||today()).slice(0,10),categoria:'Mensalidades',descricao:`${a.nome||'Aluno'} — ${curso(c.curso_id)?.titulo||''}`,valor:numBR(c.valor),forma:'Pix',documento:'Comprovante na plataforma',ref:'comp:'+c.id}); drawContab() });
   $$('#contabPanel [data-dellc]').forEach(b=>b.onclick=()=>confirmBox('Apagar este lançamento do caixa?',async()=>{ await API.apagarLancamento(isNaN(+b.dataset.dellc)?b.dataset.dellc:+b.dataset.dellc); drawContab() }));
@@ -2517,6 +2547,7 @@ function etuFechamento(P,L){
     <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff"><b>2. DAS do MEI de ${esc(nm(ant))}</b> — ${etuDasPago(L,ant)?`<span class="pill on">Pago (${esc(etuDasPago(L,ant))})</span>`:`<span class="pill lock">${new Date().getDate()>20?'Atrasado':'A pagar até o dia 20'}</span>`}
       ${etuDasPago(L,ant)?'<p style="margin:6px 0 0;font-size:15px">Pagamento registrado no caixa. O comprovante deve ser guardado.</p>':`<p style="margin:6px 0 8px;font-size:15px">O DAS é pago todo mês, mesmo sem vendas. Emita a guia no aplicativo MEI ou no Portal do Empreendedor${new Date().getDate()>20?' (como venceu, gere a guia nova: ela já vem com juros e multa)':''}. Depois de pagar, informe o valor abaixo: a plataforma lança a saída no caixa e dá baixa na pendência num toque só.</p>
       <div class="grid2"><div><label for="dasValor">Valor pago (R$)</label><input id="dasValor" inputmode="decimal" placeholder="0,00"></div><div><label for="dasData">Data do pagamento</label><input id="dasData" type="date" value="${today()}"></div></div>
+      <label for="dasArq">Comprovante do pagamento (foto ou PDF)</label><input id="dasArq" type="file" accept="application/pdf,image/*">
       <div class="msg hidden" id="mDas"></div>
       <div class="res"><button class="btn btn-gold btn-sm" type="button" id="dasReg">Registrar pagamento do DAS</button><a class="btn btn-line btn-sm" href="https://www.gov.br/empresas-e-negocios/pt-br/empreendedor" target="_blank" rel="noopener">Abrir o Portal do Empreendedor</a></div>
       <p style="margin:8px 0 0;font-size:14px;color:#5b6070">Dica: no aplicativo MEI dá para cadastrar o débito automático do DAS.</p>`}</div>
@@ -2530,6 +2561,10 @@ function etuFechamento(P,L){
       <div class="res"><button class="btn btn-line btn-sm" type="button" id="fechAno">Gerar resumo do ano anterior</button><button class="btn btn-line btn-sm" type="button" id="fechDasn">${etuFechStatus(ano).dasn?'Desmarcar':'Marcar declaração como enviada'}</button></div></div>
     <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff"><b>4. Nota fiscal</b>
       <p style="margin:6px 0 0;font-size:15px">O MEI emite nota fiscal de serviço quando o pagador é empresa (CNPJ) ou quando o aluno pedir. Ao lançar uma entrada com nota, escreva no campo Documento o número começando por “NF” (ex.: NF 123); o relatório separa sozinho as receitas com e sem nota.</p></div>
+    <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff" id="etuArqComp"><b>5. Arquivo de comprovantes</b>
+      <p style="margin:6px 0 8px;font-size:15px">Todos os comprovantes anexados aos lançamentos, guardados na plataforma e organizados por ano e mês. Para anexar: ao fazer um lançamento novo, escolha o arquivo no campo “Comprovante”; para um lançamento já feito, toque em “Anexar comprovante” na lista do mês. Guarde por 5 anos.</p>
+      <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap"><div><label for="arqAno">Ano</label><select id="arqAno">${[...new Set([ano].concat(L.map(l=>(l.data||'').slice(0,4)).filter(Boolean)))].sort().reverse().map(a=>`<option ${a===ano?'selected':''}>${a}</option>`).join('')}</select></div></div>
+      <div id="arqLista" style="margin-top:10px"></div></div>
    </div>
    <p style="margin:12px 0 0;font-size:14px;color:#5b6070">Os pagamentos do DAS ficam registrados no caixa da escola; a marcação da declaração anual fica neste aparelho. Os prazos seguem as regras atuais do MEI; confirme sempre no Portal do Empreendedor ou com um contador.</p>`;
   P.insertBefore(d,P.children[2]||null);
@@ -2555,9 +2590,20 @@ function etuFechamento(P,L){
   }
   $('#fechGerar').onclick=()=>{ if(relMes(ant)) etuFechGrava(ant,{fechado:new Date().toLocaleDateString('pt-BR')}) };
   d.querySelectorAll('[data-relm]').forEach(b=>b.onclick=()=>relMes(b.dataset.relm));
-  async function regDas(m,valor,data,msg){ const v=numBR(valor); if(!(v>0)){ if(msg) show(msg,'Digite o valor pago, como está no comprovante.','err'); return }
-    try{ await API.salvarLancamento({tipo:'saida',data:data||today(),categoria:'Impostos e taxas',descricao:'DAS do MEI — competência '+nm(m),valor:v,forma:'Pix',documento:'DAS '+m}); etuFechGrava(m,{das:fmtDate(data||today())}); drawContab() }catch(e){ if(msg) show(msg,e.message,'err'); else alert(e.message) } }
-  const dr=$('#dasReg'); if(dr) dr.onclick=()=>regDas(ant,$('#dasValor').value,$('#dasData').value,$('#mDas'));
+  async function regDas(m,valor,data,msg,arq){ const v=numBR(valor); if(!(v>0)){ if(msg) show(msg,'Digite o valor pago, como está no comprovante.','err'); return }
+    try{ let anexo=null; if(arq){ if(msg) show(msg,'Enviando o comprovante…','ok'); anexo=await etuEnviarComprovante(arq,(data||today()).slice(0,7)) }
+      const reg={tipo:'saida',data:data||today(),categoria:'Impostos e taxas',descricao:'DAS do MEI — competência '+nm(m),valor:v,forma:'Pix',documento:'DAS '+m}; if(anexo) reg.anexo=anexo;
+      await API.salvarLancamento(reg); etuFechGrava(m,{das:fmtDate(data||today())}); drawContab() }catch(e){ if(msg) show(msg,e.message,'err'); else alert(e.message) } }
+  const dr=$('#dasReg'); if(dr) dr.onclick=()=>{ dr.disabled=true; regDas(ant,$('#dasValor').value,$('#dasData').value,$('#mDas'),$('#dasArq')&&$('#dasArq').files[0]).finally(()=>{ dr.disabled=false }) };
+  function arqLista(){ const a=$('#arqAno').value, box=$('#arqLista'); const C=L.filter(l=>l.anexo&&(l.data||'').startsWith(a)).sort((x,y)=>x.data<y.data?1:-1);
+    const sem=L.filter(l=>!l.anexo&&l.tipo==='saida'&&(l.data||'').startsWith(a)).length;
+    let h=sem?`<p style="margin:0 0 8px;font-size:14.5px;color:#7A1B2B">${sem} saída(s) de ${a} ainda sem comprovante anexado. Abra o mês na lista de lançamentos e toque em “Anexar comprovante”.</p>`:'';
+    if(!C.length){ box.innerHTML=h+'<p style="margin:0;color:#5b6070">Nenhum comprovante anexado em '+a+'.</p>'; return }
+    const porMes={}; C.forEach(l=>{ const k=l.data.slice(0,7); (porMes[k]=porMes[k]||[]).push(l) });
+    h+=Object.keys(porMes).sort().reverse().map(k=>`<details ${k===today().slice(0,7)?'open':''} style="border:1px solid #eee;border-radius:8px;padding:8px 10px;margin-bottom:6px"><summary style="cursor:pointer;font-weight:700">${MESES[+k.slice(5)-1]} — ${porMes[k].length} comprovante(s)</summary>
+      ${porMes[k].map(l=>`<div style="display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;border-top:1px solid #f0f0f0;padding:7px 0;font-size:15px"><span style="flex:1 1 180px">${fmtDate(l.data)} · <b>${l.tipo==='entrada'?'Entrada':'Saída'}</b> · ${esc(l.categoria||'')}<br><span style="color:#5b6070;font-size:14px">${esc(l.descricao||'')}</span></span><b>${brl(numBR(l.valor))}</b><button class="btn btn-navy btn-sm" type="button" data-arqver="${esc(l.anexo)}">Abrir</button></div>`).join('')}</details>`).join('');
+    box.innerHTML=h; box.querySelectorAll('[data-arqver]').forEach(b=>b.onclick=()=>etuAbrirComprovante(b.dataset.arqver)) }
+  $('#arqAno').onchange=arqLista; arqLista();
   d.querySelectorAll('[data-dasm]').forEach(b=>b.onclick=()=>{ const v=prompt('Valor pago do DAS de '+nm(b.dataset.dasm)+' (R$):'); if(v===null) return; const dt=prompt('Data do pagamento (dia/mês/ano):',new Date().toLocaleDateString('pt-BR')); if(dt===null) return; const q=dt.split('/'); const iso=q.length===3?q[2]+'-'+q[1].padStart(2,'0')+'-'+q[0].padStart(2,'0'):today(); regDas(b.dataset.dasm,v,iso,null) });
   $('#fechDasn').onclick=()=>{ const s2=etuFechStatus(ano); etuFechGrava(ano,{dasn:s2.dasn?'':new Date().toLocaleDateString('pt-BR')}); drawContab() };
   $('#fechAno').onclick=()=>{ const a=String(+ano-1); const E=ent(L.filter(l=>(l.data||'').startsWith(a)));
