@@ -7611,3 +7611,95 @@ window.addEventListener("hashchange", () => {
   }
   setTimeout(() => etuFesta("Parabéns! Curso concluído!", "“Combati o bom combate, acabei a carreira, guardei a fé” (2 Timóteo 4.7). Que Deus abençoe o seu ministério!"), 900);
 });
+const ETU_PALAVRAS = [
+  { p: "Amor", l: "grego", o: "agápē", s: "o amor que se doa e busca o bem do outro, mesmo quando não há nada a receber em troca", v: "Porque Deus amou o mundo de tal maneira que deu o seu Filho unigênito, para que todo aquele que nele crê não pereça, mas tenha a vida eterna.", r: "João 3.16", a: "O amor de Deus não é sentimento passageiro: é decisão que se entrega. Amar como Ele ama é servir sem esperar aplauso." },
+  { p: "Misericórdia", l: "hebraico", o: "hesed", s: "o amor leal de Deus, fiel à aliança, que não desiste do seu povo", v: "As misericórdias do SENHOR são a causa de não sermos consumidos, porque as suas misericórdias não têm fim.", r: "Lamentações 3.22", a: "Se você ainda está de pé, é porque a fidelidade de Deus não desistiu de você." },
+  { p: "Graça", l: "grego", o: "cháris", s: "o favor imerecido: o presente que Deus dá a quem não merecia", v: "Porque pela graça sois salvos, por meio da fé; e isso não vem de vós; é dom de Deus.", r: "Efésios 2.8", a: "Ninguém conquista a salvação; recebe-a. A graça cura o orgulho e consola o cansado." },
+  { p: "Aniquilou-se (esvaziou-se)", l: "grego", o: "kenóō", s: "esvaziar-se: Cristo não deixou de ser Deus, mas abriu mão da sua glória e assumiu a forma de servo", v: "Mas aniquilou-se a si mesmo, tomando a forma de servo, fazendo-se semelhante aos homens.", r: "Filipenses 2.7", a: "O Filho de Deus desceu para servir. Na Igreja, a grandeza se mede pelo serviço." },
+  { p: "Consolador", l: "grego", o: "paráklētos", s: "aquele que é chamado para estar ao lado: o que ajuda, defende, conforta e ensina", v: "E eu rogarei ao Pai, e ele vos dará outro Consolador, para que fique convosco para sempre.", r: "João 14.16", a: "O Espírito Santo é uma Pessoa que caminha ao seu lado. Você não está sozinho." },
+  { p: "Paz", l: "hebraico", o: "shalom", s: "muito mais que ausência de guerra: inteireza, bem-estar completo, vida em ordem diante de Deus", v: "O SENHOR sobre ti levante o seu rosto e te dê a paz.", r: "Números 6.26", a: "A paz bíblica começa na reconciliação com Deus e alcança a casa, a mente e os relacionamentos." },
+  { p: "Arrependimento", l: "grego", o: "metánoia", s: "mudança de mente que produz mudança de direção e de vida", v: "Arrependei-vos, pois, e convertei-vos, para que sejam apagados os vossos pecados.", r: "Atos 3.19", a: "Arrepender-se não é só chorar: é dar meia-volta e andar na direção de Deus." },
+  { p: "Fé", l: "grego", o: "pístis", s: "confiança firme, fidelidade, entrega a alguém digno de crédito", v: "Ora, a fé é o firme fundamento das coisas que se esperam e a prova das coisas que se não veem.", r: "Hebreus 11.1", a: "Fé não é pensamento positivo: é confiar em Quem prometeu, mesmo antes de ver." },
+  { p: "Igreja", l: "grego", o: "ekklēsía", s: "assembleia: o povo chamado para fora do mundo e reunido por Deus", v: "Sobre esta pedra edificarei a minha igreja, e as portas do inferno não prevalecerão contra ela.", r: "Mateus 16.18", a: "A Igreja não é o prédio: somos nós, chamados por Cristo. Cuide do seu lugar no Corpo." },
+  { p: "Glória", l: "hebraico", o: "kavod", s: "peso, importância, esplendor: a majestade de Deus que se manifesta", v: "Santo, Santo, Santo é o SENHOR dos Exércitos; toda a terra está cheia da sua glória.", r: "Isaías 6.3", a: "Quem percebe o peso da glória de Deus não trata as coisas santas com leveza." },
+  { p: "Santo", l: "hebraico", o: "qadosh", s: "separado, posto à parte, consagrado: diferente de tudo o que é comum e impuro", v: "Santos sereis, porque eu, o SENHOR, vosso Deus, sou santo.", r: "Levítico 19.2", a: "Ser santo é pertencer a Deus em tudo: no falar, no vestir, no trabalhar e no pensar." },
+  { p: "Verbo", l: "grego", o: "lógos", s: "palavra, razão, expressão: Cristo é a expressão perfeita de Deus", v: "No princípio, era o Verbo, e o Verbo estava com Deus, e o Verbo era Deus.", r: "João 1.1", a: "Quer saber como Deus é? Olhe para Jesus: Ele é a Palavra de Deus em pessoa." },
+  { p: "Redenção", l: "grego", o: "apolýtrōsis", s: "libertação mediante o pagamento de um resgate, como a compra da liberdade de um escravo", v: "Em quem temos a redenção pelo seu sangue, a remissão das ofensas, segundo as riquezas da sua graça.", r: "Efésios 1.7", a: "Você foi comprado por alto preço: o sangue de Cristo. Viva como quem é livre." },
+  { p: "Aleluia", l: "hebraico", o: "hallelu-Yah", s: "“louvai ao SENHOR”: um chamado para que todos louvem a Deus", v: "Tudo quanto tem fôlego louve ao SENHOR. Louvai ao SENHOR.", r: "Salmos 150.6", a: "Enquanto houver fôlego, há motivo para louvar." },
+  { p: "Amém", l: "hebraico", o: "amen", s: "firme, verdadeiro, seguro: “assim é” e “assim seja”", v: "Porque todas quantas promessas há de Deus são nele sim; e por ele o Amém, para glória de Deus, por nós.", r: "2 Coríntios 1.20", a: "Em Cristo, as promessas de Deus são firmes. Diga “amém” com fé, e não por costume." },
+  { p: "Espírito", l: "hebraico e grego", o: "rúach / pneûma", s: "vento, sopro, espírito: a mesma palavra descreve o vento e o Espírito de Deus", v: "O vento assopra onde quer, e ouves a sua voz, mas não sabes donde vem, nem para onde vai; assim é todo aquele que é nascido do Espírito.", r: "João 3.8", a: "Como o vento, o Espírito não se vê, mas se percebe pelos efeitos: vidas transformadas." },
+  { p: "Batizar", l: "grego", o: "baptízō", s: "mergulhar, imergir, submergir", v: "Portanto, ide, ensinai todas as nações, batizando-as em nome do Pai, e do Filho, e do Espírito Santo.", r: "Mateus 28.19", a: "O batismo nas águas é o testemunho público de quem morreu para o pecado e ressurgiu para uma nova vida." },
+  { p: "Evangelho", l: "grego", o: "euangélion", s: "boa notícia, boa nova: o anúncio da salvação em Cristo", v: "O tempo está cumprido, e o Reino de Deus está próximo. Arrependei-vos e crede no evangelho.", r: "Marcos 1.15", a: "Quem recebeu a melhor notícia do mundo não consegue guardá-la para si." },
+  { p: "Ressurreição", l: "grego", o: "anástasis", s: "levantar-se, pôr-se de pé novamente", v: "Eu sou a ressurreição e a vida; quem crê em mim, ainda que esteja morto, viverá.", r: "João 11.25", a: "Em Cristo, a morte não tem a última palavra. Há esperança diante de todo túmulo." },
+  { p: "Pecado", l: "grego", o: "hamartía", s: "errar o alvo: falhar o propósito para o qual Deus nos criou", v: "Porque todos pecaram e destituídos estão da glória de Deus.", r: "Romanos 3.23", a: "Todos erramos o alvo, mas em Cristo há perdão e um novo começo." }
+];
+const ETU_OFICINA = {
+  texto: "Porque Deus amou o mundo de tal maneira que deu o seu Filho unigênito, para que todo aquele que nele crê não pereça, mas tenha a vida eterna.",
+  ref: "João 3.16",
+  tipos: [
+    { n: "Temático", def: "O tema nasce do texto, mas as divisões vêm de vários textos da Bíblia que tratam do mesmo assunto.", tit: "O amor de Deus", div: [["Um amor eterno", "“Com amor eterno te amei” (Jeremias 31.3)."], ["Um amor sacrificial", "“Mas Deus prova o seu amor para conosco em que Cristo morreu por nós, sendo nós ainda pecadores” (Romanos 5.8)."], ["Um amor que transforma", "“Nós o amamos a ele porque ele nos amou primeiro” (1 João 4.19)."]], apl: "Quem conhece o amor de Deus aprende a amar: em casa, na igreja e com quem ainda não conhece a Cristo.", van: "Permite tratar um assunto com amplitude bíblica.", cui: "Cada texto citado precisa ser lido no seu próprio contexto." },
+    { n: "Textual", def: "As divisões saem das palavras do próprio versículo (um texto curto), e cada parte é desenvolvida pelo pregador.", tit: "As quatro grandezas de João 3.16", div: [["A grandeza do Doador", "“Deus amou”: a iniciativa é de Deus."], ["A grandeza da dádiva", "“deu o seu Filho unigênito”: a palavra “unigênito”, no grego, significa único, sem igual."], ["A grandeza do alcance", "“todo aquele que nele crê”: ninguém está fora do convite."], ["A grandeza do propósito", "“não pereça, mas tenha a vida eterna”: livramento e vida."]], apl: "O amor de Deus alcança você hoje, e a resposta pedida é uma só: crer.", van: "O ouvinte memoriza o versículo junto com o sermão.", cui: "As divisões devem respeitar o sentido do texto, sem forçar palavras." },
+    { n: "Expositivo", def: "O sermão explica uma passagem mais extensa no seu contexto: a ideia central e as divisões nascem do texto e são explicadas por ele.", tit: "Nascer de novo pela fé no Filho levantado (João 3.1-18)", div: [["A necessidade: nascer de novo (3.3-7)", "Nicodemos, mestre em Israel, veio de noite. Jesus mostrou que nem a religião nem o conhecimento salvam: é preciso nascer do alto."], ["A provisão: o Filho levantado (3.14-15)", "Como a serpente de metal no deserto (Números 21.8-9), quem olhava vivia. Cristo seria levantado na cruz para que quem crê tenha vida."], ["A resposta: crer para não perecer (3.16-18)", "O amor de Deus oferece; a fé recebe. Quem crê não é condenado."]], apl: "A pergunta de Jesus a Nicodemos chega a nós: você já nasceu de novo? Olhe para Cristo, levantado na cruz, e viva.", van: "Mostra ao ouvinte o que o texto realmente diz, no contexto do autor.", cui: "Exige estudo do contexto, das palavras e do argumento da passagem." }
+  ]
+};
+function etuPalavraHoje() {
+  const d = /* @__PURE__ */ new Date();
+  const ini = new Date(d.getFullYear(), 0, 0);
+  const dia = Math.floor((d - ini) / 864e5);
+  return ETU_PALAVRAS[dia % ETU_PALAVRAS.length];
+}
+function etuOficinaAbrir() {
+  const O = ETU_OFICINA;
+  const aba = (t, i) => `<button type="button" role="tab" class="of-ab" data-of="${i}" aria-selected="${i === 0}" style="min-height:44px;padding:8px 14px;border-radius:22px;border:1.5px solid #C9A24A;background:${i === 0 ? "#1B2238" : "#fff"};color:${i === 0 ? "#E3C77A" : "#1B2238"};font:inherit;font-size:16px;cursor:pointer">${esc(t.n)}</button>`;
+  const corpo = (t) => `<p style="margin:0 0 10px;font-style:italic">${esc(t.def)}</p><h4 style="margin:6px 0 8px;font-size:20px;color:#6E1A26">${esc(t.tit)}</h4><ol style="margin:0 0 10px;padding-left:22px">${t.div.map((d) => `<li style="margin-bottom:8px"><b>${esc(d[0])}</b><br>${esc(d[1])}</li>`).join("")}</ol><p style="margin:0 0 10px"><b>Aplicação:</b> ${esc(t.apl)}</p><p style="margin:0;font-size:15px;color:#555"><b>Vantagem:</b> ${esc(t.van)} <b>Cuidado:</b> ${esc(t.cui)}</p>`;
+  const tabela = `<table style="width:100%;border-collapse:collapse;font-size:15px;margin-top:6px"><thead><tr><th style="text-align:left;border-bottom:2px solid #C9A24A;padding:6px">Tipo</th><th style="text-align:left;border-bottom:2px solid #C9A24A;padding:6px">De onde vêm as divisões</th></tr></thead><tbody>${O.tipos.map((t) => `<tr><td style="padding:6px;border-bottom:1px solid #eee"><b>${esc(t.n)}</b></td><td style="padding:6px;border-bottom:1px solid #eee">${esc(t.def)}</td></tr>`).join("")}</tbody></table>`;
+  modal(`<h3>Oficina do Sermão</h3><p style="margin:0 0 6px">Um mesmo texto, três formas de pregar:</p><blockquote style="margin:0 0 12px;padding:10px 14px;border-left:4px solid #C9A24A;background:#F7F1E3;font-style:italic">“${esc(O.texto)}” <b style="font-style:normal">(${esc(O.ref)})</b></blockquote><div role="tablist" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${O.tipos.map(aba).join("")}</div><div id="ofCorpo">${corpo(O.tipos[0])}</div><details style="margin-top:14px"><summary style="cursor:pointer;font-weight:700">Comparar os três tipos</summary>${tabela}</details><p style="margin:14px 0 0;font-size:15px">Aprenda a preparar e pregar sermões fiéis ao texto na disciplina <b>Homilética</b>, do Curso Médio de Teologia.</p><div class="acts"><button class="btn btn-gold" data-close>Fechar</button></div>`);
+  document.querySelectorAll(".of-ab").forEach((b) => b.onclick = () => {
+    const i = +b.dataset.of;
+    document.querySelectorAll(".of-ab").forEach((x) => {
+      const on = x === b;
+      x.setAttribute("aria-selected", on);
+      x.style.background = on ? "#1B2238" : "#fff";
+      x.style.color = on ? "#E3C77A" : "#1B2238";
+    });
+    document.getElementById("ofCorpo").innerHTML = corpo(O.tipos[i]);
+  });
+}
+(function() {
+  function monta() {
+    if (document.getElementById("etuPalavra")) return true;
+    const ref = document.getElementById("etuVitrine");
+    if (!ref) return false;
+    const w = etuPalavraHoje();
+    const sec = document.createElement("section");
+    sec.className = "block";
+    sec.id = "etuPalavra";
+    sec.setAttribute("aria-label", "Para quem ama a Palavra");
+    sec.innerHTML = `<div style="text-align:center;font-family:Cinzel,Georgia,serif;letter-spacing:4px;font-size:13px;color:#8a6b1f;margin-bottom:6px">PARA QUEM AMA A PALAVRA</div><h2 style="text-align:center;margin:0 0 16px">Estudo, pregação e profundidade</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;max-width:880px;width:calc(100% - 28px);margin:0 auto">
+ <article style="background:#fff;border:1.5px solid #C9A24A;border-radius:14px;padding:20px 22px">
+  <div style="font-family:Cinzel,Georgia,serif;font-size:12px;letter-spacing:3px;color:#8a6b1f">A PALAVRA DO DIA NO ORIGINAL</div>
+  <h3 style="margin:6px 0 6px;font-size:28px;color:#1B2238">${esc(w.p)}</h3>
+  <p style="margin:0 0 8px">Esta palavra no ${esc(w.l)} significa <b>${esc(w.s)}</b>.</p>
+  <p style="margin:0 0 10px;font-style:italic;border-left:4px solid #C9A24A;padding-left:10px">“${esc(w.v)}” <b style="font-style:normal">(${esc(w.r)})</b></p>
+  <p style="margin:0 0 8px"><b>Para hoje:</b> ${esc(w.a)}</p>
+  <p style="margin:0;font-size:14px;color:#666">No original: ${esc(w.o)} • Uma palavra nova a cada dia.</p>
+ </article>
+ <article style="background:#1B2238;color:#F7F1E3;border:1.5px solid #C9A24A;border-radius:14px;padding:20px 22px;display:flex;flex-direction:column">
+  <div style="font-family:Cinzel,Georgia,serif;font-size:12px;letter-spacing:3px;color:#E3C77A">OFICINA DO SERMÃO</div>
+  <h3 style="margin:6px 0 8px;font-size:26px;color:#fff">Temático, textual ou expositivo?</h3>
+  <p style="margin:0 0 14px">Veja o mesmo texto, João 3.16, preparado nos três tipos de sermão: título, divisões e aplicação, lado a lado.</p>
+  <button type="button" id="etuOficinaBtn" class="btn btn-gold" style="margin-top:auto;align-self:flex-start">Abrir a Oficina do Sermão</button>
+ </article>
+</div>`;
+    ref.parentNode.insertBefore(sec, ref);
+    document.getElementById("etuOficinaBtn").onclick = etuOficinaAbrir;
+    return true;
+  }
+  function tenta(n) {
+    if (monta()) return;
+    if (n > 0) setTimeout(() => tenta(n - 1), 800);
+  }
+  if (document.readyState === "loading") addEventListener("DOMContentLoaded", () => tenta(12));
+  else tenta(12);
+})();
