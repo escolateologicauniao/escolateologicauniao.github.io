@@ -168,7 +168,7 @@ const EMBED_OK = !/claude\.ai|claudeusercontent|anthropic/.test(location.hostnam
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const today = () => new Date().toISOString().slice(0,10);
+const today = () => { const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10) };
 const fmtDate = d => d ? d.split('-').reverse().join('/') : '—';
 const curso = id => CURSOS.find(c => c.id === id);
 function star(n,color='#C9A24A',s=14){let o='';for(let i=0;i<n;i++)o+=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" fill="${color}"/></svg>`;return o}
@@ -253,6 +253,10 @@ function SupaBackend(){
       err(await sb.storage.from('caixa').upload(nome,file,{contentType:file.type||'application/octet-stream',upsert:false})); return nome },
     async linkCaixa(nome,baixar){ return err(await sb.storage.from('caixa').createSignedUrl(nome,300,baixar?{download:true}:undefined)).signedUrl },
     async anexoLancamento(id,nome){ err(await sb.from('lancamentos').update({anexo:nome}).eq('id',id)) },
+    async contasPagar(){ return err(await sb.from('contas_pagar').select('*').order('vencimento',{ascending:true}).limit(2000)) },
+    async salvarContaPagar(c){ return err(await sb.from('contas_pagar').insert(c).select('id').single()) },
+    async alterarContaPagar(id,c){ err(await sb.from('contas_pagar').update(c).eq('id',id)) },
+    async apagarContaPagar(id){ err(await sb.from('contas_pagar').delete().eq('id',id)) },
     async apagarLancamento(id){ err(await sb.from('lancamentos').delete().eq('id',id)) },
     async perguntarContador(msgs,modo='contabil'){ const {data,error}=await sb.functions.invoke('assistente',{body:{mensagens:msgs,modo}}); if(error) throw new Error('O assistente não respondeu agora. Tente novamente em instantes.'); if(data?.erro) throw new Error(data.erro); return data },
     async atualizarConta(d){ if(d&&d.nome&&!S.profile?.is_admin&&etuNomeReservado(d.nome,'')){ etuAlertaSeg('tentativa de trocar o nome da conta',d.nome,S.user?.email||'',S.profile?.telefone||'',etuNomeReservado(d.nome,'')); throw new Error('Este nome é reservado à Direção da Escola Teológica União.') } return this._atualizarConta(d) },
@@ -494,6 +498,10 @@ function DemoBackend(){
     async anexarCaixa(){ throw new Error('Os comprovantes ficam guardados no banco de dados da escola. Entre pela plataforma ligada ao banco.') },
     async linkCaixa(){ return '' },
     async anexoLancamento(){ throw new Error('Os comprovantes ficam guardados no banco de dados da escola.') },
+    async contasPagar(){ try{return JSON.parse(localStorage.getItem('etu_contas')||'[]')}catch(e){return []} },
+    async salvarContaPagar(c){ const L=await this.contasPagar(); const id=uid(); L.push({id,status:'aberto',criado_em:new Date().toISOString(),...c}); localStorage.setItem('etu_contas',JSON.stringify(L)); return {id} },
+    async alterarContaPagar(id,c){ const L=(await this.contasPagar()).map(x=>String(x.id)===String(id)?{...x,...c}:x); localStorage.setItem('etu_contas',JSON.stringify(L)) },
+    async apagarContaPagar(id){ const L=(await this.contasPagar()).filter(x=>String(x.id)!==String(id)); localStorage.setItem('etu_contas',JSON.stringify(L)) },
     async perguntarContador(){ return {resposta:'A assessoria virtual ainda aguarda a conexão com o banco de dados e a ativação do serviço de inteligência artificial. Sua pergunta não foi enviada a um modelo de IA. Os manuais e as opções podem ser preparados antes da ativação.'} },
     async atualizarConta(d){ const u=me(); if(!u) throw new Error('Entre novamente.'); if(u.pw!==d.atual) throw new Error('A senha atual não confere.');
       if(d.email && db.users.some(x=>x.id!==u.id && x.email.toLowerCase()===d.email.toLowerCase())) throw new Error('Este e-mail já é usado por outra conta. A conta da Direção precisa de um e-mail só dela.');
@@ -1532,6 +1540,7 @@ async function drawContab(){
       r.textContent=d.resposta+(d.fontes?.length?'\n\nManuais consultados: '+[...new Set(d.fontes)].join('; '):'');
     }catch(e){r.textContent=e.message}finally{botao.disabled=false}
   };
+  try{ window.etuContas=await API.contasPagar(); CX.contasErro='' }catch(e){ window.etuContas=null; CX.contasErro=e.message }
   try{ etuFechamento(P,L) }catch(e){ console.log(e) }
 }
 function recibo(l){ if(!l) return; const w=window.open('','_blank'); if(!w) return; const n=l.documento||('R-'+String(l.id).slice(-6).toUpperCase());
@@ -2527,10 +2536,12 @@ function etuMesAnterior(){ const d=new Date(); d.setDate(1); d.setMonth(d.getMon
 function etuFechStatus(m){ try{ return JSON.parse(localStorage.getItem(etuFechKey(m))||'{}') }catch(e){ return {} } }
 function etuFechGrava(m,o){ try{ localStorage.setItem(etuFechKey(m),JSON.stringify(Object.assign(etuFechStatus(m),o))) }catch(e){} }
 function etuDasPago(L,m){ const x=(L||[]).find(l=>l.tipo==='saida'&&(l.documento||'').trim()==='DAS '+m); if(x) return fmtDate(x.data); return etuFechStatus(m).das||'' }
+function etuDiasPara(iso){ const a=new Date(today()+'T12:00:00'), b=new Date((iso||today())+'T12:00:00'); return Math.round((b-a)/864e5) }
 function etuPendencias(L){
   L=L||window.etuCxL||[]; const hoje=new Date(), dia=hoje.getDate(), ant=etuMesAnterior(), nm=MESES[+ant.slice(5)-1]+' de '+ant.slice(0,4), out=[];
   if(!etuDasPago(L,ant)) out.push({t:'Pagar e registrar o DAS do MEI de '+nm,p:dia<=20?'vence no dia 20; faltam '+(20-dia)+' dia(s)':'atrasado: emita a guia nova, com juros, no aplicativo MEI'});
   if(hoje.getMonth()<=4 && !etuFechStatus(String(hoje.getFullYear())).dasn) out.push({t:'Enviar a Declaração Anual do MEI (DASN-SIMEI) do ano de '+(hoje.getFullYear()-1),p:'até 31 de maio'});
+  (window.etuContas||[]).filter(c=>c.status!=='pago').forEach(c=>{ const d=etuDiasPara(c.vencimento); if(d<0) out.push({t:'Pagar '+(c.tipo||'boleto').toLowerCase()+': '+c.descricao+' ('+brl(numBR(c.valor))+')',p:'venceu em '+fmtDate(c.vencimento)+', há '+(-d)+' dia(s)'}); else if(d<=5) out.push({t:'Pagar '+(c.tipo||'boleto').toLowerCase()+': '+c.descricao+' ('+brl(numBR(c.valor))+')',p:d===0?'vence hoje':'vence em '+fmtDate(c.vencimento)+'; faltam '+d+' dia(s)'}) });
   return out;
 }
 function etuFechamento(P,L){
@@ -2565,6 +2576,8 @@ function etuFechamento(P,L){
       <p style="margin:6px 0 8px;font-size:15px">Todos os comprovantes anexados aos lançamentos, guardados na plataforma e organizados por ano e mês. Para anexar: ao fazer um lançamento novo, escolha o arquivo no campo “Comprovante”; para um lançamento já feito, toque em “Anexar comprovante” na lista do mês. Guarde por 5 anos.</p>
       <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap"><div><label for="arqAno">Ano</label><select id="arqAno">${[...new Set([ano].concat(L.map(l=>(l.data||'').slice(0,4)).filter(Boolean)))].sort().reverse().map(a=>`<option ${a===ano?'selected':''}>${a}</option>`).join('')}</select></div></div>
       <div id="arqLista" style="margin-top:10px"></div></div>
+    <div style="border:1px solid #E1D4B2;border-radius:10px;padding:12px 14px;background:#fff" id="etuContas"><b>6. Boletos e guias a pagar</b>
+      <div id="ctBox" style="margin-top:8px"></div></div>
    </div>
    <p style="margin:12px 0 0;font-size:14px;color:#5b6070">Os pagamentos do DAS ficam registrados no caixa da escola; a marcação da declaração anual fica neste aparelho. Os prazos seguem as regras atuais do MEI; confirme sempre no Portal do Empreendedor ou com um contador.</p>`;
   P.insertBefore(d,P.children[2]||null);
@@ -2604,6 +2617,7 @@ function etuFechamento(P,L){
       ${porMes[k].map(l=>`<div style="display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;border-top:1px solid #f0f0f0;padding:7px 0;font-size:15px"><span style="flex:1 1 180px">${fmtDate(l.data)} · <b>${l.tipo==='entrada'?'Entrada':'Saída'}</b> · ${esc(l.categoria||'')}<br><span style="color:#5b6070;font-size:14px">${esc(l.descricao||'')}</span></span><b>${brl(numBR(l.valor))}</b><button class="btn btn-navy btn-sm" type="button" data-arqver="${esc(l.anexo)}">Abrir</button></div>`).join('')}</details>`).join('');
     box.innerHTML=h; box.querySelectorAll('[data-arqver]').forEach(b=>b.onclick=()=>etuAbrirComprovante(b.dataset.arqver)) }
   $('#arqAno').onchange=arqLista; arqLista();
+  etuContasDesenha(L,nm);
   d.querySelectorAll('[data-dasm]').forEach(b=>b.onclick=()=>{ const v=prompt('Valor pago do DAS de '+nm(b.dataset.dasm)+' (R$):'); if(v===null) return; const dt=prompt('Data do pagamento (dia/mês/ano):',new Date().toLocaleDateString('pt-BR')); if(dt===null) return; const q=dt.split('/'); const iso=q.length===3?q[2]+'-'+q[1].padStart(2,'0')+'-'+q[0].padStart(2,'0'):today(); regDas(b.dataset.dasm,v,iso,null) });
   $('#fechDasn').onclick=()=>{ const s2=etuFechStatus(ano); etuFechGrava(ano,{dasn:s2.dasn?'':new Date().toLocaleDateString('pt-BR')}); drawContab() };
   $('#fechAno').onclick=()=>{ const a=String(+ano-1); const E=ent(L.filter(l=>(l.data||'').startsWith(a)));
@@ -2616,11 +2630,74 @@ function etuFechamento(P,L){
      <tr class="tot"><td>Total do ano</td><td class="r">${brl(tS)}</td><td class="r">${brl(tC)}</td><td class="r">${brl(tS+tC)}</td></tr></table>
      <p style="margin-top:14px">Na declaração, informe o total do ano como receita bruta de <b>prestação de serviços</b>. Se houve funcionário registrado, informe também.</p></body></html>`); w.document.close(); w.print() };
 }
+/* Boletos e guias a pagar: aberto (vermelho/âmbar) → pago (verde), com boleto e comprovante guardados */
+const CT={verPagos:false,pagando:null};
+function etuContasDesenha(L,nm){
+  const box=$('#ctBox'); if(!box) return;
+  if(window.etuContas===null){ box.innerHTML=`<p style="margin:0;font-size:15px;color:#7A1B2B">Esta parte ainda precisa ser ativada no banco de dados${CX.contasErro?' ('+esc(CX.contasErro)+')':''}. Rode o arquivo 11_contas_pagar.sql no Supabase.</p>`; return }
+  const C=window.etuContas||[], abertas=C.filter(c=>c.status!=='pago').sort((a,b)=>a.vencimento<b.vencimento?-1:1), pagas=C.filter(c=>c.status==='pago').sort((a,b)=>(a.pago_em||'')<(b.pago_em||'')?1:-1);
+  const venc=abertas.filter(c=>etuDiasPara(c.vencimento)<0), prox=abertas.filter(c=>{const d=etuDiasPara(c.vencimento);return d>=0&&d<=5});
+  const totAb=abertas.reduce((x,c)=>x+numBR(c.valor),0);
+  const selo=c=>{ if(c.status==='pago') return `<span style="background:#E3F3E7;color:#1E5E33;border:1px solid #A7D3B1;border-radius:999px;padding:2px 10px;font-size:13.5px;font-weight:700">✓ Pago em ${fmtDate(c.pago_em)}</span>`;
+    const d=etuDiasPara(c.vencimento); if(d<0) return `<span style="background:#FBEFEF;color:#7A1B2B;border:1px solid #E0B4B4;border-radius:999px;padding:2px 10px;font-size:13.5px;font-weight:700">Vencido há ${-d} dia(s)</span>`;
+    if(d===0) return `<span style="background:#FBEFEF;color:#7A1B2B;border:1px solid #E0B4B4;border-radius:999px;padding:2px 10px;font-size:13.5px;font-weight:700">Vence hoje</span>`;
+    if(d<=5) return `<span style="background:#FFF4DC;color:#7A5410;border:1px solid #E6C98A;border-radius:999px;padding:2px 10px;font-size:13.5px;font-weight:700">Vence em ${d} dia(s)</span>`;
+    return `<span style="background:#EEF2F8;color:#1B2B4B;border:1px solid #C9D3E3;border-radius:999px;padding:2px 10px;font-size:13.5px;font-weight:700">Em aberto · vence ${fmtDate(c.vencimento)}</span>` };
+  const cor=c=>{ if(c.status==='pago') return '#2E7D4F'; const d=etuDiasPara(c.vencimento); return d<=0?'#9B2A22':d<=5?'#C9A24A':'#1B2B4B' };
+  const item=c=>`<div style="border:1px solid #E8E1CF;border-left:5px solid ${cor(c)};border-radius:10px;padding:10px 12px;margin-bottom:8px;background:${c.status==='pago'?'#F6FBF7':'#fff'}">
+     <div style="display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center"><b style="flex:1 1 160px;font-size:15.5px">${esc(c.descricao)}</b><b style="font-size:16px">${brl(numBR(c.status==='pago'&&c.valor_pago?c.valor_pago:c.valor))}</b></div>
+     <div style="font-size:14px;color:#5b6070;margin:3px 0 6px">${esc(c.tipo||'Boleto')}${c.competencia?' · competência '+esc(nm(c.competencia)):''} · ${esc(c.categoria||'')} · vencimento ${fmtDate(c.vencimento)}</div>
+     <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">${selo(c)}
+      ${c.boleto?`<button class="btn btn-line btn-sm" type="button" data-ctbol="${esc(c.id)}">Ver ${c.tipo&&c.tipo.startsWith('Guia')?'guia':'boleto'}</button>`:''}
+      ${c.codigo&&c.status!=='pago'?`<button class="btn btn-line btn-sm" type="button" data-ctcod="${esc(c.id)}">Copiar código</button>`:''}
+      ${c.status==='pago'?(c.comprovante?`<button class="btn btn-navy btn-sm" type="button" data-ctcomp="${esc(c.id)}">Ver comprovante</button>`:''):`<button class="btn btn-gold btn-sm" type="button" data-ctpag="${esc(c.id)}">Registrar pagamento</button><button class="btn btn-red btn-sm" type="button" data-ctdel="${esc(c.id)}">Apagar</button>`}</div>
+     ${CT.pagando===String(c.id)?`<div style="margin-top:10px;border-top:1px dashed #E1D4B2;padding-top:10px"><div class="grid2"><div><label for="ctPV">Valor pago (R$)</label><input id="ctPV" inputmode="decimal" value="${numBR(c.valor).toFixed(2).replace('.',',')}"></div><div><label for="ctPD">Data do pagamento</label><input id="ctPD" type="date" value="${today()}"></div></div>
+       <label for="ctPA">Comprovante do pagamento (foto ou PDF)</label><input id="ctPA" type="file" accept="application/pdf,image/*">
+       <div class="msg hidden" id="mCtP"></div><div class="res"><button class="btn btn-gold btn-sm" type="button" id="ctPOk">Confirmar pagamento</button><button class="btn btn-line btn-sm" type="button" id="ctPNo">Cancelar</button></div></div>`:''}</div>`;
+  box.innerHTML=`${venc.length||prox.length?`<div style="background:${venc.length?'#FBEFEF':'#FFF7E3'};border:1px solid ${venc.length?'#E0B4B4':'#E6C98A'};border-radius:10px;padding:10px 14px;margin-bottom:10px"><b style="color:${venc.length?'#7A1B2B':'#7A5410'}">${venc.length?venc.length+' vencido(s)':''}${venc.length&&prox.length?' e ':''}${prox.length?prox.length+' vencendo em até 5 dias':''}</b><div style="font-size:14.5px;margin-top:2px">Pague e registre o pagamento com o comprovante: o aviso some e o lançamento entra no caixa.</div></div>`
+     :abertas.length?`<div style="background:#EEF2F8;border:1px solid #C9D3E3;border-radius:10px;padding:10px 14px;margin-bottom:10px"><b style="color:#1B2B4B">${abertas.length} conta(s) em aberto, nenhuma vencendo nos próximos 5 dias.</b> Total a pagar: ${brl(totAb)}.</div>`
+     :`<div style="background:#EAF5EC;border:1px solid #A7D3B1;border-radius:10px;padding:10px 14px;margin-bottom:10px"><b style="color:#1E5E33">Tudo quitado.</b> Nenhum boleto ou guia em aberto.</div>`}
+    <p style="margin:0 0 8px;font-size:15px">Cadastre aqui cada boleto, guia do DAS, guia da Receita ou conta da escola assim que chegar. A plataforma avisa o vencimento, guarda o boleto e, quando o senhor registrar o pagamento com o comprovante, lança a saída no caixa e marca como quitado.</p>
+    <details ${abertas.length?'':'open'} style="border:1px solid #E1D4B2;border-radius:10px;padding:8px 12px;margin-bottom:10px;background:#FFFDF6"><summary style="cursor:pointer;font-weight:700">+ Cadastrar boleto ou guia</summary>
+     <div class="grid2" style="margin-top:8px"><div><label for="ctTipo">Tipo</label><select id="ctTipo"><option>Boleto</option><option>Guia do DAS (MEI)</option><option>Guia da Receita</option><option>Conta (água, luz, internet)</option><option>Outro</option></select></div>
+      <div><label for="ctCat">Categoria</label><select id="ctCat">${CX_CAT.saida.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div></div>
+     <label for="ctDesc">Descrição (a quem pagar e o motivo)</label><input id="ctDesc" placeholder="Ex.: Gráfica — impressão de apostilas">
+     <div class="grid2"><div><label for="ctVal">Valor (R$)</label><input id="ctVal" inputmode="decimal" placeholder="0,00"></div><div><label for="ctVenc">Vencimento</label><input id="ctVenc" type="date" value="${today()}"></div></div>
+     <div id="ctCompBox" style="display:none"><label for="ctComp">Mês de competência do DAS</label><input id="ctComp" type="month" value="${etuMesAnterior()}"></div>
+     <label for="ctCod">Linha digitável ou código Pix copia e cola (opcional)</label><input id="ctCod" placeholder="Cole aqui o código do boleto">
+     <label for="ctArq">Arquivo do boleto ou da guia (foto ou PDF)</label><input id="ctArq" type="file" accept="application/pdf,image/*">
+     <div class="msg hidden" id="mCt"></div><div class="res"><button class="btn btn-gold btn-sm" type="button" id="ctAdd">Guardar boleto</button></div></details>
+    ${abertas.length?`<div style="font-weight:700;margin:6px 0">Em aberto</div>${abertas.map(item).join('')}`:''}
+    ${pagas.length?`<div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px"><b>Pagos (${pagas.length})</b><button class="btn btn-line btn-sm" type="button" id="ctVerPagos">${CT.verPagos?'Esconder':'Mostrar'}</button></div>${CT.verPagos?pagas.slice(0,60).map(item).join(''):''}`:''}`;
+  const acha=id=>C.find(x=>String(x.id)===String(id));
+  const tipo=$('#ctTipo'); tipo.onchange=()=>{ const das=tipo.value.startsWith('Guia do DAS'); $('#ctCompBox').style.display=das?'block':'none'; if(das||tipo.value==='Guia da Receita') $('#ctCat').value='Impostos e taxas'; if(das&&!$('#ctDesc').value) $('#ctDesc').value='DAS do MEI' };
+  $('#ctAdd').onclick=async()=>{ const m=$('#mCt'), v=numBR($('#ctVal').value), desc=$('#ctDesc').value.trim(); if(!desc) return show(m,'Escreva a descrição.','err'); if(!(v>0)) return show(m,'Digite o valor do boleto.','err'); if(!$('#ctVenc').value) return show(m,'Escolha o vencimento.','err');
+    const b=$('#ctAdd'); b.disabled=true;
+    try{ const f=$('#ctArq').files&&$('#ctArq').files[0]; let arq=null; if(f){ show(m,'Enviando o arquivo…','ok'); arq=await etuEnviarComprovante(f,$('#ctVenc').value.slice(0,7)) }
+      const das=tipo.value.startsWith('Guia do DAS'); const c={tipo:tipo.value,descricao:das&&$('#ctComp').value?'DAS do MEI — competência '+nm($('#ctComp').value):desc,categoria:$('#ctCat').value,valor:v,vencimento:$('#ctVenc').value,codigo:$('#ctCod').value.trim()||null,boleto:arq,competencia:das?($('#ctComp').value||null):null};
+      await API.salvarContaPagar(c); drawContab() }catch(e){ b.disabled=false; show(m,e.message,'err') } };
+  box.querySelectorAll('[data-ctbol]').forEach(b=>b.onclick=()=>etuAbrirComprovante(acha(b.dataset.ctbol).boleto));
+  box.querySelectorAll('[data-ctcomp]').forEach(b=>b.onclick=()=>etuAbrirComprovante(acha(b.dataset.ctcomp).comprovante));
+  box.querySelectorAll('[data-ctcod]').forEach(b=>b.onclick=async()=>{ const c=acha(b.dataset.ctcod); try{ await navigator.clipboard.writeText(c.codigo); b.textContent='Código copiado ✓' }catch(e){ prompt('Copie o código:',c.codigo) } });
+  box.querySelectorAll('[data-ctdel]').forEach(b=>b.onclick=()=>confirmBox('Apagar este boleto da lista? Use só se foi cadastrado por engano.',async()=>{ await API.apagarContaPagar(acha(b.dataset.ctdel).id); drawContab() }));
+  box.querySelectorAll('[data-ctpag]').forEach(b=>b.onclick=()=>{ CT.pagando=b.dataset.ctpag; etuContasDesenha(L,nm); const el=$('#ctPV'); if(el) el.scrollIntoView({block:'center'}) });
+  const vp=$('#ctVerPagos'); if(vp) vp.onclick=()=>{ CT.verPagos=!CT.verPagos; etuContasDesenha(L,nm) };
+  const no=$('#ctPNo'); if(no) no.onclick=()=>{ CT.pagando=null; etuContasDesenha(L,nm) };
+  const ok=$('#ctPOk'); if(ok) ok.onclick=async()=>{ const c=acha(CT.pagando), m=$('#mCtP'), v=numBR($('#ctPV').value), dt=$('#ctPD').value||today(); if(!(v>0)) return show(m,'Digite o valor pago.','err');
+    ok.disabled=true;
+    try{ const f=$('#ctPA').files&&$('#ctPA').files[0]; let comp=null; if(f){ show(m,'Enviando o comprovante…','ok'); comp=await etuEnviarComprovante(f,dt.slice(0,7)) }
+      const reg={tipo:'saida',data:dt,categoria:c.categoria||'Outras saídas',descricao:c.descricao,valor:v,forma:c.tipo&&c.tipo.startsWith('Guia')?'Guia':'Boleto',documento:c.competencia?'DAS '+c.competencia:(c.tipo||'Boleto')+' venc. '+fmtDate(c.vencimento)}; if(comp) reg.anexo=comp;
+      const r=await API.salvarLancamento(reg);
+      await API.alterarContaPagar(c.id,{status:'pago',pago_em:dt,valor_pago:v,comprovante:comp,lancamento_id:r&&r.id&&!isNaN(+r.id)?+r.id:null});
+      if(c.competencia) etuFechGrava(c.competencia,{das:fmtDate(dt)});
+      CT.pagando=null; drawContab() }catch(e){ ok.disabled=false; show(m,e.message,'err') } };
+}
 /* Aviso de pendências do contador ao abrir o Painel da Direção */
 (function(){
   function avisa(){
     if(!(S.profile&&S.profile.is_admin)) return; if(location.hash!=='#admin') return;
     if(!window.etuCxL){ API.lancamentos().then(L=>{ window.etuCxL=L||[]; avisa() }).catch(()=>{}); return }
+    if(window.etuContas===undefined){ window.etuContas=null; API.contasPagar().then(C=>{ window.etuContas=C||[]; avisa() }).catch(()=>{}); return }
     const pend=etuPendencias(), v=document.querySelector('[data-view="admin"] .wrap'); if(!v) return;
     let b=document.getElementById('etuAvisoCont'); if(!pend.length){ if(b) b.remove(); return }
     if(!b){ b=document.createElement('div'); b.id='etuAvisoCont'; b.style.cssText='background:#FFF7E3;border:1px solid #C9A24A;border-left:5px solid #C9A24A;border-radius:10px;padding:12px 16px;margin:14px 0;color:#1B2238'; v.insertBefore(b,v.firstChild) }
