@@ -3128,6 +3128,8 @@ function etuSituacaoMens(m){
 async function etuPainelNumeros(alunos,pendPag){
   const mes=today().slice(0,7);
   let L=[]; try{ L=await API.lancamentos() }catch(e){} window.etuCxL=L;
+  try{ window.etuContas=await API.contasPagar() }catch(e){ window.etuContas=window.etuContas||[] }
+  try{ window.etuDasnL=await API.declaracoesMei() }catch(e){ window.etuDasnL=window.etuDasnL||[] }
   let T=[]; try{ T=await API.tentativasTodas() }catch(e){}
   const novos=alunos.filter(a=>String(a.criado_em||'').startsWith(mes)).length;
   const ativos=alunos.filter(a=>!a.bloqueado&&a.matriculas.some(isActive)).length;
@@ -3143,7 +3145,8 @@ async function etuPainelNumeros(alunos,pendPag){
     +card(atras,'Mensalidades atrasadas',vence+' vencem em 7 dias','mens',atras>0)
     +card(provas,'Provas feitas no mês','')
     +card(concl,'Cursos concluídos','soma de todos os alunos')
-    +card(etuPendencias(L).length,'Pendências do MEI','toque para ver','contab',etuPendencias(L).length>0)
+    +(()=>{ const pd=etuPendencias(L); return card(pd.length,'Pendências do MEI',pd.length?(pd.length===1?esc(pd[0].t.replace(/ \(R\$[^)]*\)/,'')):'toque para ver'):'tudo em dia ✓','contab',pd.length>0) })()
+    +(()=>{ const ab=(window.etuContas||[]).filter(c=>c.status!=='pago'), ve=ab.filter(c=>etuDiasPara(c.vencimento)<=0).length; return card(ab.length,'Boletos e guias a pagar',ab.length?(ve?ve+' vencido(s) ou vencendo hoje':'próximo vence em '+fmtDate(ab.slice().sort((a,b)=>a.vencimento<b.vencimento?-1:1)[0].vencimento)):'tudo quitado ✓','contab',ve>0) })()
     +await (async()=>{ let n=0; try{ const lim=new Date(Date.now()-30*864e5).toISOString(); n=(await API.atendimentos()).filter(t=>String(t.criado_em||'')>=lim&&/^(ALERTA DE SEGURANÇA|DENÚNCIA DE PERFIL FALSO)/.test(String(t.mensagem||''))).length }catch(e){} return card(n,'Alertas de segurança','últimos 30 dias · toque para ver','atendimentos',n>0) })();
   $$('#stats [data-ir]').forEach(d=>d.onclick=()=>{ const k=d.dataset.ir; if(k==='mens'){ const p=$('#mensPanel'); if(p) p.scrollIntoView({behavior:'smooth'}); return } const t=document.querySelector('.tabs button[data-tab="'+k+'"]'); if(t) t.click() });
 }
