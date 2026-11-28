@@ -5718,7 +5718,7 @@ window.etuAtivarNotif = async function(m, depois) {
   if (depois) depois();
 };
 (function() {
-  var VERSAO = "Versão 53 · 27/11/2026";
+  var VERSAO = "Versão 54 · 27/11/2026";
   function estadoNotif() {
     if (!("Notification" in window)) return "não disponíveis neste aparelho";
     return Notification.permission === "granted" ? "ativadas ✓" : Notification.permission === "denied" ? "bloqueadas no celular" : "desativadas";
@@ -7704,6 +7704,10 @@ addEventListener("load", () => {
       audio = null;
       return false;
     }
+    if (window.etuMusicaCria) {
+      audio = window.etuMusicaCria();
+      return !!audio;
+    }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return false;
     const ctx = new AC(), mestre = ctx.createGain();
@@ -7961,17 +7965,22 @@ function etuOficinaAbrir() {
   function musica() {
     var AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return null;
-    var ctx = new AC(), mestre = ctx.createGain();
+    var ctx = new AC(), mestre = ctx.createGain(), comp = ctx.createDynamicsCompressor();
     mestre.gain.value = 0;
-    mestre.connect(ctx.destination);
+    comp.threshold.value = -10;
+    comp.knee.value = 6;
+    comp.ratio.value = 4;
+    mestre.connect(comp);
+    comp.connect(ctx.destination);
     var filtro = ctx.createBiquadFilter();
     filtro.type = "lowpass";
-    filtro.frequency.value = 1300;
+    filtro.frequency.value = 1600;
     filtro.connect(mestre);
     var AC4 = [[130.81, 196, 261.63, 329.63], [110, 164.81, 220, 261.63], [87.31, 174.61, 220, 261.63], [98, 146.83, 196, 246.94]];
     var SIN = [523.25, 587.33, 659.25, 783.99, 659.25, 587.33], passo = 0, vivo = true, prox = ctx.currentTime + 0.1;
     function alvo() {
-      return 1.15 * (window.etuVolume ? window.etuVolume() : 0.7);
+      var v = window.etuVolume ? window.etuVolume() : 0.7;
+      return 2.4 * v * v;
     }
     mestre.gain.linearRampToValueAtTime(alvo(), ctx.currentTime + 3);
     window.etuVolAplica = function() {
@@ -7999,7 +8008,7 @@ function etuOficinaAbrir() {
       o.type = "sine";
       o.frequency.value = f;
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.03, t + 0.05);
+      g.gain.linearRampToValueAtTime(0.09, t + 0.05);
       g.gain.exponentialRampToValueAtTime(1e-4, t + 2.8);
       o.connect(g);
       g.connect(filtro);
@@ -8011,7 +8020,7 @@ function etuOficinaAbrir() {
       while (prox < ctx.currentTime + 6) {
         var a = AC4[passo % 4];
         a.forEach(function(f, k) {
-          nota(f, prox, 6.5, k ? "sine" : "triangle", k ? 0.028 : 0.04);
+          nota(f, prox, 6.5, k ? "sine" : "triangle", k ? 0.085 : 0.12);
         });
         if (passo % 2 === 0) sino(SIN[passo / 2 % SIN.length], prox + 2.4);
         passo++;
@@ -8033,6 +8042,7 @@ function etuOficinaAbrir() {
       }
     } };
   }
+  window.etuMusicaCria = musica;
   var SL = [
     { i: "brasao-redondo.webp", s: "BEM-VINDO", h: "Escola Teológica União", p: "Formação Bíblica, Teológica e Ministerial. Uma escola de <b>curso livre de teologia</b>, com sede em Cristalina, Goiás, para quem deseja conhecer a Palavra de Deus com profundidade e servir melhor no Reino.", sem: 1 },
     { i: "diretor.webp", s: "A DIREÇÃO", h: "Pr. Charlei de Jesus Lima Dias", p: "Idealizador e Diretor Geral da escola, prepara e acompanha o conteúdo de cada curso, numa linha <b>pentecostal clássica, trinitária</b> e fiel às Escrituras.<br><i>“Estudar as Escrituras com seriedade, à luz do Espírito Santo, é preparar a vida, fortalecer o ministério e servir melhor a Cristo.”</i>", foto: 1 },
@@ -8065,7 +8075,7 @@ function etuOficinaAbrir() {
     o.setAttribute("aria-label", "Apresentação da Escola Teológica União");
     o.innerHTML = '<div class="tr-top"><img src="brasao-redondo.webp" alt=""><b>CONHEÇA A ESCOLA</b><button type="button" data-t="x" aria-label="Fechar a apresentação">✕</button></div><div class="tr-palco" aria-live="polite"></div><div class="tr-pe"><div class="tr-barra">' + SL.map(function() {
       return "<i></i>";
-    }).join("") + '</div><div class="tr-ct"><button type="button" data-t="a" aria-label="Anterior">◀</button><button type="button" data-t="p" class="forte">❚❚ Pausar</button><button type="button" data-t="n" aria-label="Próximo">▶</button><button type="button" data-t="m">♪ Música</button><button type="button" data-t="v" aria-label="Volume e leitura">Aa</button></div></div>';
+    }).join("") + '</div><div class="tr-ct"><button type="button" data-t="a" aria-label="Anterior">◀</button><button type="button" data-t="p" class="forte">❚❚ Pausar</button><button type="button" data-t="n" aria-label="Próximo">▶</button><button type="button" data-t="m">♪ Música</button><button type="button" data-t="vm" aria-label="Diminuir o volume">🔉 −</button><button type="button" data-t="vp" aria-label="Aumentar o volume">🔊 +</button></div></div>';
     document.body.appendChild(o);
     document.documentElement.style.overflow = "hidden";
     var palco = o.querySelector(".tr-palco"), i = 0, tm = null, pausa = false, som = null;
@@ -8145,8 +8155,11 @@ function etuOficinaAbrir() {
     bt("m").onclick = function() {
       mus(!som);
     };
-    bt("v").onclick = function() {
-      if (window.etuAa) window.etuAa();
+    bt("vm").onclick = function() {
+      window.etuVolPasso(-10);
+    };
+    bt("vp").onclick = function() {
+      window.etuVolPasso(10);
     };
     bt("p").onclick = function() {
       if (SL[i].fim) {
@@ -8378,6 +8391,32 @@ function etuOficinaAbrir() {
   window.etuVolume = function() {
     return (parseInt(ler("etu_vol", "70"), 10) || 0) / 100;
   };
+  window.etuVolPasso = function(n) {
+    var v = Math.max(0, Math.min(100, (parseInt(ler("etu_vol", "70"), 10) || 0) + n));
+    grava("etu_vol", String(v));
+    if (window.etuVolAplica) window.etuVolAplica();
+    var t = document.getElementById("etuVolAviso");
+    if (!t) {
+      t = document.createElement("div");
+      t.id = "etuVolAviso";
+      t.setAttribute("role", "status");
+      t.style.cssText = "position:fixed;left:50%;top:22%;transform:translateX(-50%);z-index:10000;background:rgba(15,27,61,.92);color:#F7EFD9;border:1px solid #C9A24A;border-radius:14px;padding:12px 22px;font:700 20px Georgia,serif;pointer-events:none";
+      document.body.appendChild(t);
+    }
+    t.textContent = "Volume: " + v + "%";
+    t.style.opacity = "1";
+    clearTimeout(t.tm);
+    t.tm = setTimeout(function() {
+      t.style.transition = "opacity .5s";
+      t.style.opacity = "0";
+    }, 1200);
+    var r = document.querySelector(".ap-folha input[type=range]");
+    if (r) {
+      r.value = v;
+      var b = document.getElementById("aaVol");
+      if (b) b.textContent = v + "%";
+    }
+  };
   window.etuAa = function() {
     if (!window.etuAp) return;
     var tam = ler("etu_tam", "1"), bri = ler("etu_brilho", "normal"), vol = ler("etu_vol", "70");
@@ -8385,7 +8424,7 @@ function etuOficinaAbrir() {
       return '<button type="button" data-tam="' + t[0] + '" aria-pressed="' + (tam === t[0]) + '">' + t[1] + "</button>";
     }).join("") + '</div><p class="aa-l">Brilho da tela</p><div class="ap-seg" role="group">' + [["suave", "Suave"], ["normal", "Normal"], ["intenso", "Intenso"]].map(function(t) {
       return '<button type="button" data-bri="' + t[0] + '" aria-pressed="' + (bri === t[0]) + '">' + t[1] + "</button>";
-    }).join("") + '</div><p class="aa-l">Cor do aplicativo e brasão</p><div class="ap-bts" style="margin-top:0"><button type="button" class="btn btn-gold btn-sm" data-aa="cores"><i class="ap-roda"></i>Opções de cores</button><button type="button" class="btn btn-line btn-sm" data-aa="brasao" style="color:#1B2238">Estilo do brasão</button></div><p class="aa-l">Volume da música ambiente</p><div class="aa-row"><span aria-hidden="true">🔈</span><input type="range" min="0" max="100" step="5" value="' + vol + '" aria-label="Volume da música"><span aria-hidden="true">🔊</span><b id="aaVol" style="min-width:44px;text-align:right">' + vol + '%</b></div><p style="margin:14px 0 0;font-size:14px;color:#5b6070">Para ver de perto uma imagem ou a capa de uma apostila, toque nela: abre o visor com zoom. Tudo fica guardado só neste aparelho.</p>';
+    }).join("") + '</div><p class="aa-l">Cor do aplicativo e brasão</p><div class="ap-bts" style="margin-top:0"><button type="button" class="btn btn-gold btn-sm" data-aa="cores"><i class="ap-roda"></i>Opções de cores</button><button type="button" class="btn btn-line btn-sm" data-aa="brasao" style="color:#1B2238">Estilo do brasão</button></div><p class="aa-l">Volume da música ambiente</p><div class="aa-row"><button type="button" class="btn btn-line btn-sm" data-vol="-10" aria-label="Diminuir o volume" style="color:#1B2238;min-width:48px">−</button><input type="range" min="0" max="100" step="5" value="' + vol + '" aria-label="Volume da música"><button type="button" class="btn btn-line btn-sm" data-vol="10" aria-label="Aumentar o volume" style="color:#1B2238;min-width:48px">+</button><b id="aaVol" style="min-width:44px;text-align:right">' + vol + '%</b></div><p style="margin:14px 0 0;font-size:14px;color:#5b6070">Para ver de perto uma imagem ou a capa de uma apostila, toque nela: abre o visor com zoom. Tudo fica guardado só neste aparelho.</p>';
     window.etuAp.folha("Leitura, brilho e cores", h, function(o) {
       o.querySelectorAll("[data-tam]").forEach(function(b) {
         b.onclick = function() {
@@ -8412,6 +8451,11 @@ function etuOficinaAbrir() {
         o.remove();
         window.etuAp.brasao();
       };
+      o.querySelectorAll("[data-vol]").forEach(function(b) {
+        b.onclick = function() {
+          window.etuVolPasso(+b.dataset.vol);
+        };
+      });
       var r = o.querySelector("input[type=range]");
       r.oninput = function() {
         grava("etu_vol", r.value);
