@@ -5718,7 +5718,7 @@ window.etuAtivarNotif = async function(m, depois) {
   if (depois) depois();
 };
 (function() {
-  var VERSAO = "Versão 54 · 27/11/2026";
+  var VERSAO = "Versão 55 · 27/11/2026";
   function estadoNotif() {
     if (!("Notification" in window)) return "não disponíveis neste aparelho";
     return Notification.permission === "granted" ? "ativadas ✓" : Notification.permission === "denied" ? "bloqueadas no celular" : "desativadas";
@@ -8343,11 +8343,11 @@ function etuOficinaAbrir() {
     });
     o.querySelector(".zm-x").focus({ preventScroll: true });
   };
-  var SEL = ".tr-img,.tr-trilho img,.gp-foto img,.gm-doc img,.dirc img,.mural img,.card img,[data-zoomavel],.ap-folha img";
+  var SEL = ".tr-img,.tr-trilho img,.gp-foto img,.gm-doc img,.dirc img,.mural img,.card img,[data-zoomavel]";
   document.addEventListener("click", function(e) {
     var im = e.target.closest && e.target.closest(SEL);
     if (!im || im.tagName !== "IMG" || im.closest("a[href]") && !im.closest(".tr")) return;
-    if (im.closest(".zm")) return;
+    if (im.closest(".zm,button,.ap-folha,.ap-atual,header")) return;
     e.preventDefault();
     e.stopPropagation();
     var fr;
