@@ -427,8 +427,8 @@ function modal(html, onReady) {
 function confirmBox(text, onYes) {
   modal(
     `<h3>Confirmar</h3><p>${esc(text)}</p><div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-red" id="yes">Confirmar</button></div>`,
-    (r2, close) => {
-      r2.querySelector("#yes").onclick = async () => {
+    (r, close) => {
+      r.querySelector("#yes").onclick = async () => {
         close();
         await onYes();
       };
@@ -438,9 +438,9 @@ function confirmBox(text, onYes) {
 function SupaBackend() {
   const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
   const site = CONFIG.SITE_URL || location.origin + location.pathname;
-  const err = (r2) => {
-    if (r2.error) throw new Error(traduz(r2.error.message));
-    return r2.data;
+  const err = (r) => {
+    if (r.error) throw new Error(traduz(r.error.message));
+    return r.data;
   };
   return {
     demo: false,
@@ -464,8 +464,8 @@ function SupaBackend() {
       return err(await sb.from("mensagens_animo").select("*").eq("ativa", true)) || [];
     },
     async animoConfig() {
-      const r2 = err(await sb.rpc("animo_config"));
-      return r2 && r2[0] || null;
+      const r = err(await sb.rpc("animo_config"));
+      return r && r[0] || null;
     },
     async animoSalvar(ativo, dias, modo) {
       err(await sb.rpc("animo_config_salvar", { p_ativo: ativo, p_dias: dias, p_modo: modo }));
@@ -474,8 +474,8 @@ function SupaBackend() {
       return err(await sb.rpc("animo_parados")) || [];
     },
     async animoPreparar(uid) {
-      const r2 = err(await sb.rpc("animo_preparar", { p_user: uid }));
-      return r2 && r2[0];
+      const r = err(await sb.rpc("animo_preparar", { p_user: uid }));
+      return r && r[0];
     },
     async animoRegistrar(uid, msg, texto, canais) {
       err(await sb.rpc("animo_registrar", { p_user: uid, p_mensagem: msg, p_texto: texto, p_origem: "manual", p_canais: canais }));
@@ -509,9 +509,9 @@ function SupaBackend() {
       return err(await sb.storage.from("carteirinhas").createSignedUrl(card.arquivo, 120, { download: "carteirinha-ETU.pdf" })).signedUrl;
     },
     async registrarDoc(tipo, cid) {
-      const r2 = await sb.rpc("registrar_documento", { p_tipo: tipo, p_curso: cid });
-      if (r2.error) return null;
-      return r2.data;
+      const r = await sb.rpc("registrar_documento", { p_tipo: tipo, p_curso: cid });
+      if (r.error) return null;
+      return r.data;
     },
     async validarDoc(cod) {
       return err(await sb.rpc("validar_documento", { p_codigo: cod })) || [];
@@ -519,15 +519,15 @@ function SupaBackend() {
     async nota(aid) {
       var _a;
       if (!S.user) return "";
-      const r2 = await sb.from("anotacoes").select("texto").eq("user_id", S.user.id).eq("aula_id", aid).maybeSingle();
-      return ((_a = r2.data) == null ? void 0 : _a.texto) || "";
+      const r = await sb.from("anotacoes").select("texto").eq("user_id", S.user.id).eq("aula_id", aid).maybeSingle();
+      return ((_a = r.data) == null ? void 0 : _a.texto) || "";
     },
     async salvarNota(aid, t) {
       err(await sb.from("anotacoes").upsert({ user_id: S.user.id, aula_id: aid, texto: t, atualizado_em: (/* @__PURE__ */ new Date()).toISOString() }));
     },
     async canais() {
-      const r2 = await sb.from("canais_oficiais").select("*").order("id");
-      return r2.data && r2.data.length ? r2.data : CANAIS_PADRAO;
+      const r = await sb.from("canais_oficiais").select("*").order("id");
+      return r.data && r.data.length ? r.data : CANAIS_PADRAO;
     },
     async salvarCanal(c) {
       err(await sb.from("canais_oficiais").insert(c));
@@ -626,16 +626,16 @@ function SupaBackend() {
       return () => sb.removeChannel(ch);
     },
     async escolaConfig() {
-      const r2 = await sb.from("escola_config").select("*").eq("id", 1).maybeSingle();
-      return r2.data || null;
+      const r = await sb.from("escola_config").select("*").eq("id", 1).maybeSingle();
+      return r.data || null;
     },
     async saveEscolaConfig(c) {
       err(await sb.from("escola_config").upsert(__spreadValues({ id: 1 }, c)));
     },
     async aiPublico() {
-      const r2 = await sb.rpc("assistente_publico");
-      if (r2.error) return null;
-      return r2.data && r2.data[0] || null;
+      const r = await sb.rpc("assistente_publico");
+      if (r.error) return null;
+      return r.data && r.data[0] || null;
     },
     async aiConfig() {
       return err(await sb.from("assistente_config").select("*").eq("id", 1).maybeSingle());
@@ -742,8 +742,8 @@ function SupaBackend() {
     },
     async apostilaBruta(id) {
       var _a;
-      const r2 = await sb.from("aulas_apostila").select("pdf_url").eq("aula_id", id).maybeSingle();
-      return ((_a = r2.data) == null ? void 0 : _a.pdf_url) || "";
+      const r = await sb.from("aulas_apostila").select("pdf_url").eq("aula_id", id).maybeSingle();
+      return ((_a = r.data) == null ? void 0 : _a.pdf_url) || "";
     },
     async enviarArquivo(file, publico) {
       const bucket = publico ? "materiais" : "apostilas";
@@ -754,8 +754,8 @@ function SupaBackend() {
     async listarArquivos() {
       const out = [];
       for (const b of ["apostilas", "materiais"]) {
-        const r2 = await sb.storage.from(b).list("", { limit: 500, sortBy: { column: "created_at", order: "desc" } });
-        (r2.data || []).filter((f) => f.name && !f.name.startsWith(".")).forEach((f) => {
+        const r = await sb.storage.from(b).list("", { limit: 500, sortBy: { column: "created_at", order: "desc" } });
+        (r.data || []).filter((f) => f.name && !f.name.startsWith(".")).forEach((f) => {
           var _a;
           return out.push({ bucket: b, nome: f.name, tam: ((_a = f.metadata) == null ? void 0 : _a.size) || 0 });
         });
@@ -765,8 +765,8 @@ function SupaBackend() {
     async linkArquivo(b, n) {
       var _a;
       if (b === "materiais") return sb.storage.from(b).getPublicUrl(n).data.publicUrl;
-      const r2 = await sb.storage.from(b).createSignedUrl(n, 3600, { download: true });
-      return (_a = r2.data) == null ? void 0 : _a.signedUrl;
+      const r = await sb.storage.from(b).createSignedUrl(n, 3600, { download: true });
+      return (_a = r.data) == null ? void 0 : _a.signedUrl;
     },
     async salvarFoto(dataUrl) {
       err(await sb.rpc("salvar_foto", { p_foto: dataUrl }));
@@ -790,7 +790,7 @@ function SupaBackend() {
       return err(await sb.from("matriculas").select("*").eq("user_id", uid));
     },
     async progresso(uid) {
-      return err(await sb.from("progresso").select("aula_id").eq("user_id", uid)).map((r2) => r2.aula_id);
+      return err(await sb.from("progresso").select("aula_id").eq("user_id", uid)).map((r) => r.aula_id);
     },
     async marcar(uid, aid, feito) {
       feito ? err(await sb.from("progresso").upsert({ user_id: uid, aula_id: aid })) : err(await sb.from("progresso").delete().eq("user_id", uid).eq("aula_id", aid));
@@ -829,9 +829,9 @@ function SupaBackend() {
       return err(await sb.from("tentativas").select("user_id,aula_id,nota,aprovado,criado_em"));
     },
     async fichaObs(uid) {
-      const r2 = await sb.from("ficha_obs").select("texto,atualizado_em").eq("user_id", uid).maybeSingle();
-      if (r2.error) throw new Error("Rode o arquivo 09_ficha.sql no Supabase para guardar as anotações.");
-      return r2.data || { texto: "" };
+      const r = await sb.from("ficha_obs").select("texto,atualizado_em").eq("user_id", uid).maybeSingle();
+      if (r.error) throw new Error("Rode o arquivo 09_ficha.sql no Supabase para guardar as anotações.");
+      return r.data || { texto: "" };
     },
     async salvarFichaObs(uid, t) {
       err(await sb.from("ficha_obs").upsert({ user_id: uid, texto: t, atualizado_em: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "user_id" }));
@@ -1961,7 +1961,7 @@ async function mountPlayer(container, cid, list, previewOnly, onChange) {
       cur = b.dataset.aula;
       S.aula = cur;
       draw();
-      containescrollTo({ top: Math.max(0, r.getBoundingClientRect().top + scrollY - 120), behavior: "smooth" });
+      scrollTo({ top: Math.max(0, container.getBoundingClientRect().top + scrollY - 120), behavior: "smooth" });
     });
     container.querySelectorAll("[data-fs]").forEach((b) => b.onclick = () => setFont(+b.dataset.fs));
     const nb = container.querySelector("[data-night]");
@@ -2017,8 +2017,8 @@ async function mountPlayer(container, cid, list, previewOnly, onChange) {
       const resp = {};
       let falta = 0;
       st.qs.forEach((q) => {
-        const r2 = f.querySelector(`input[name="q_${q.id}"]:checked`);
-        if (r2) resp[q.id] = +r2.value;
+        const r = f.querySelector(`input[name="q_${q.id}"]:checked`);
+        if (r) resp[q.id] = +r.value;
         else falta++;
       });
       const box = f.querySelector("#quizScore");
@@ -2027,29 +2027,29 @@ async function mountPlayer(container, cid, list, previewOnly, onChange) {
         return;
       }
       try {
-        const r2 = await API.corrigir(cur, resp);
+        const r = await API.corrigir(cur, resp);
         st.qs.forEach((q) => {
           var _a2, _b, _c;
-          const fs = f.querySelector(`[data-q="${q.id}"]`), ok = r2.resultado[q.id];
+          const fs = f.querySelector(`[data-q="${q.id}"]`), ok = r.resultado[q.id];
           fs.querySelectorAll(".opt").forEach((o) => o.classList.remove("right", "wrong"));
           const chosen = fs.querySelector(`input[value="${resp[q.id]}"]`).closest(".opt");
           chosen.classList.add(ok ? "right" : "wrong");
           const fb = fs.querySelector(".fb");
           fb.className = "fb " + (ok ? "r" : "w");
-          const gc = (_a2 = r2.gabarito) == null ? void 0 : _a2[q.id];
+          const gc = (_a2 = r.gabarito) == null ? void 0 : _a2[q.id];
           if (!ok && gc != null) {
             const c2 = (_b = fs.querySelector(`input[value="${gc}"]`)) == null ? void 0 : _b.closest(".opt");
             c2 && c2.classList.add("right");
           }
-          fb.innerHTML = (ok ? "<b>✓ Correto.</b>" : "<b>✕ Incorreto.</b>" + (gc != null ? ` A resposta certa é a alternativa <b>${LETRAS[gc]}</b>.` : "")) + (((_c = r2.explicacao) == null ? void 0 : _c[q.id]) ? `<span style="display:block;margin-top:6px;color:var(--ink);font-weight:400">${esc(r2.explicacao[q.id])}</span>` : "");
+          fb.innerHTML = (ok ? "<b>✓ Correto.</b>" : "<b>✕ Incorreto.</b>" + (gc != null ? ` A resposta certa é a alternativa <b>${LETRAS[gc]}</b>.` : "")) + (((_c = r.explicacao) == null ? void 0 : _c[q.id]) ? `<span style="display:block;margin-top:6px;color:var(--ink);font-weight:400">${esc(r.explicacao[q.id])}</span>` : "");
         });
         S.tent = await API.tentativas(S.user.id);
         S.prog = await API.progresso(S.user.id);
-        box.innerHTML = r2.aprovado ? `<div class="score ok"><b>Aprovado com ${r2.nota}%.</b> Esta aula foi registrada como concluída. Siga para a próxima aula.</div><div class="res"><button class="btn btn-gold btn-sm" type="button" id="nextLes">Ir para a próxima aula</button></div>` : `<div class="score no"><b>Nota: ${r2.nota}%.</b> A nota mínima é ${CONFIG.NOTA_MINIMA}%. Revise o vídeo e a apostila e refaça a prova — não desista!</div><div class="res"><button class="btn btn-navy btn-sm" type="button" id="retry">Refazer a prova</button></div>`;
+        box.innerHTML = r.aprovado ? `<div class="score ok"><b>Aprovado com ${r.nota}%.</b> Esta aula foi registrada como concluída. Siga para a próxima aula.</div><div class="res"><button class="btn btn-gold btn-sm" type="button" id="nextLes">Ir para a próxima aula</button></div>` : `<div class="score no"><b>Nota: ${r.nota}%.</b> A nota mínima é ${CONFIG.NOTA_MINIMA}%. Revise o vídeo e a apostila e refaça a prova — não desista!</div><div class="res"><button class="btn btn-navy btn-sm" type="button" id="retry">Refazer a prova</button></div>`;
         f.querySelectorAll("input[type=radio]").forEach((i) => i.disabled = true);
-        if (r2.aprovado) {
+        if (r.aprovado) {
           try {
-            etuFesta("Aprovado! Glória a Deus!", `Você alcançou ${r2.nota}%. Continue firme: “Procura apresentar-te a Deus aprovado” (2 Timóteo 2.15).`);
+            etuFesta("Aprovado! Glória a Deus!", `Você alcançou ${r.nota}%. Continue firme: “Procura apresentar-te a Deus aprovado” (2 Timóteo 2.15).`);
           } catch (_) {
           }
         }
@@ -2065,7 +2065,7 @@ async function mountPlayer(container, cid, list, previewOnly, onChange) {
             S.aula = cur;
           }
           draw();
-          containescrollTo({ top: Math.max(0, r2.getBoundingClientRect().top + scrollY - 120), behavior: "smooth" });
+          scrollTo({ top: Math.max(0, container.getBoundingClientRect().top + scrollY - 120), behavior: "smooth" });
         };
         onChange && onChange();
         box.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -2327,25 +2327,25 @@ async function dlgAcomp(a) {
     <textarea id="fiObs" rows="4" placeholder="Ex.: pediu para pagar no dia 10; é obreiro na igreja tal; prefere contato à noite.">${esc(obs.texto || "")}</textarea>
     <div class="msg hidden" id="mFi"></div><div class="res"><button class="btn btn-navy btn-sm" id="fiSalvar" type="button">Salvar anotação</button><button class="btn btn-line btn-sm" id="fiImp" type="button">Imprimir a ficha</button></div>
     <div class="acts">${a.telefone ? `<a class="btn btn-line" href="https://wa.me/55${esc((a.telefone || "").replace(/\D/g, "").replace(/^55/, ""))}" target="_blank" rel="noopener">WhatsApp do aluno</a>` : ""}<button class="btn btn-gold" data-close>Fechar</button></div>`,
-    (r2) => {
-      r2.querySelector(".box").style.maxWidth = "760px";
-      r2.querySelector("#fiSalvar").onclick = async () => {
+    (r) => {
+      r.querySelector(".box").style.maxWidth = "760px";
+      r.querySelector("#fiSalvar").onclick = async () => {
         try {
-          await API.salvarFichaObs(a.id, r2.querySelector("#fiObs").value);
-          show(r2.querySelector("#mFi"), "Anotação salva.", "ok");
+          await API.salvarFichaObs(a.id, r.querySelector("#fiObs").value);
+          show(r.querySelector("#mFi"), "Anotação salva.", "ok");
         } catch (e) {
-          show(r2.querySelector("#mFi"), e.message, "err");
+          show(r.querySelector("#mFi"), e.message, "err");
         }
       };
-      r2.querySelector("#fiImp").onclick = () => {
+      r.querySelector("#fiImp").onclick = () => {
         const w = window.open("", "_blank");
         if (!w) return;
-        const c = r2.querySelector(".box").cloneNode(true);
+        const c = r.querySelector(".box").cloneNode(true);
         c.querySelectorAll("button,.acts,.res,.msg").forEach((x) => x.remove());
         const ta = c.querySelector("textarea");
         if (ta) {
           const p2 = document.createElement("p");
-          p2.textContent = r2.querySelector("#fiObs").value || "—";
+          p2.textContent = r.querySelector("#fiObs").value || "—";
           ta.replaceWith(p2);
         }
         w.document.write(`<html><head><title>Ficha — ${esc(a.nome || "")}</title><style>body{font-family:Georgia,serif;color:#1b2340;margin:26px;font-size:14px}h3{margin:0}.fi-h{display:flex;justify-content:space-between;border-bottom:2px solid #C9A24A;padding-bottom:8px}.fi-n{border:1.5px solid #C9A24A;padding:6px 10px;font-weight:700}.fi-g{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0}.fi-g div{border:1px solid #ddd;padding:5px}.fi-g small{display:block;color:#8C6A1E;font-size:11px}.fi-sec{font-weight:700;margin:14px 0 4px;border-bottom:1px solid #C9A24A}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px;text-align:left}.progress{display:none}</style></head><body><p style="margin:0 0 8px"><b>ESCOLA TEOLÓGICA UNIÃO</b> · Curso Livre de Teologia · ficha de uso interno da Direção</p>${c.innerHTML}<p style="margin-top:18px;font-size:12px">Impresso em ${dataExtenso(/* @__PURE__ */ new Date())}. Documento interno; contém dados pessoais protegidos pela LGPD.</p></body></html>`);
@@ -2370,14 +2370,14 @@ function dlgAcesso(a) {
       <div class="chips" style="margin-top:8px"><button type="button" class="btn btn-line btn-sm" data-d="7" data-c="${c.id}">Prévia 7 dias</button><button type="button" class="btn btn-line btn-sm" data-d="30" data-c="${c.id}">30 dias</button><button type="button" class="btn btn-line btn-sm" data-d="365" data-c="${c.id}">1 ano</button></div></div>`;
   }).join("");
   modal(`<h3>Acesso de ${esc(a.nome)}</h3><p style="margin:6px 0 0;color:var(--muted);font-size:16px">Libere cursos inteiros, defina a validade ou conceda uma prévia por poucos dias.</p>${rows}
-    <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-gold" id="salvarAc">Salvar</button></div>`, (r2, close) => {
-    r2.querySelectorAll("[data-d]").forEach((b) => b.onclick = () => {
-      r2.querySelector("#st-" + b.dataset.c).value = "ativo";
-      r2.querySelector("#ex-" + b.dataset.c).value = plus(+b.dataset.d);
+    <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-gold" id="salvarAc">Salvar</button></div>`, (r, close) => {
+    r.querySelectorAll("[data-d]").forEach((b) => b.onclick = () => {
+      r.querySelector("#st-" + b.dataset.c).value = "ativo";
+      r.querySelector("#ex-" + b.dataset.c).value = plus(+b.dataset.d);
     });
-    r2.querySelector("#salvarAc").onclick = async () => {
+    r.querySelector("#salvarAc").onclick = async () => {
       for (const c of CURSOS) {
-        const st = r2.querySelector("#st-" + c.id).value, ex = r2.querySelector("#ex-" + c.id).value;
+        const st = r.querySelector("#st-" + c.id).value, ex = r.querySelector("#ex-" + c.id).value;
         const had = a.matriculas.some((m) => m.curso_id === c.id);
         if (st) await API.setMatricula(a.id, c.id, st, ex);
         else if (had) await API.delMatricula(a.id, c.id);
@@ -2442,8 +2442,8 @@ async function dlgAula(a) {
     <div id="qList"></div>
     <button type="button" class="btn btn-line btn-sm" id="addQ" style="margin-top:12px">Adicionar questão</button>
     <div class="msg hidden" id="mAula"></div>
-    <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-gold" id="salvarAula">Salvar aula</button></div>`, (r2, close) => {
-    const qList = r2.querySelector("#qList");
+    <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-gold" id="salvarAula">Salvar aula</button></div>`, (r, close) => {
+    const qList = r.querySelector("#qList");
     function readQs() {
       return [...qList.querySelectorAll(".qedit")].map((el) => {
         var _a;
@@ -2469,24 +2469,24 @@ async function dlgAula(a) {
       });
     }
     drawQs();
-    r2.querySelector("#fDisc").oninput = () => {
-      const n = +r2.querySelector("#fDisc").value;
-      const d = S.discs.find((x) => x.curso_id === r2.querySelector("#fCur").value && x.ordem === n);
-      if (d) r2.querySelector("#fMod").value = d.nome;
+    r.querySelector("#fDisc").oninput = () => {
+      const n = +r.querySelector("#fDisc").value;
+      const d = S.discs.find((x) => x.curso_id === r.querySelector("#fCur").value && x.ordem === n);
+      if (d) r.querySelector("#fMod").value = d.nome;
     };
-    r2.querySelector("#fMod").onchange = () => {
-      const x = lessonsOf(r2.querySelector("#fCur").value).find((l) => l.modulo === r2.querySelector("#fMod").value.trim());
-      if (x) r2.querySelector("#fDisc").value = x.disc_ordem || 1;
+    r.querySelector("#fMod").onchange = () => {
+      const x = lessonsOf(r.querySelector("#fCur").value).find((l) => l.modulo === r.querySelector("#fMod").value.trim());
+      if (x) r.querySelector("#fDisc").value = x.disc_ordem || 1;
     };
-    bindUploads(r2);
-    r2.querySelector("#addQ").onclick = () => {
+    bindUploads(r);
+    r.querySelector("#addQ").onclick = () => {
       qs = readQs();
       qs.push({ enunciado: "", alternativas: ["", "", "", "", ""], correta: 0 });
       drawQs();
     };
-    r2.querySelector("#salvarAula").onclick = async () => {
-      const m = r2.querySelector("#mAula");
-      const t = r2.querySelector("#fTit").value.trim();
+    r.querySelector("#salvarAula").onclick = async () => {
+      const m = r.querySelector("#mAula");
+      const t = r.querySelector("#fTit").value.trim();
       if (!t) {
         show(m, "Informe o título da aula.", "err");
         return;
@@ -2498,10 +2498,10 @@ async function dlgAula(a) {
         return;
       }
       try {
-        const cur = r2.querySelector("#fCur").value;
+        const cur = r.querySelector("#fCur").value;
         const id = await API.saveAula(
-          { id: a == null ? void 0 : a.id, curso_id: cur, modulo: r2.querySelector("#fMod").value.trim() || "Disciplina", disc_ordem: +r2.querySelector("#fDisc").value || 1, ordem: +r2.querySelector("#fOrd").value || 1, horas: +r2.querySelector("#fHor").value || 0, titulo: t, descricao: r2.querySelector("#fDes").value.trim(), previa_texto: r2.querySelector("#fPrevTxt").value.trim(), previa: r2.querySelector("#fPrev").checked, apostila_amostra: r2.querySelector("#fAmo").checked },
-          { video_url: r2.querySelector("#fVid").value.trim(), audio_url: r2.querySelector("#fAud").value.trim(), pdf_url: r2.querySelector("#fPdf").value.trim() }
+          { id: a == null ? void 0 : a.id, curso_id: cur, modulo: r.querySelector("#fMod").value.trim() || "Disciplina", disc_ordem: +r.querySelector("#fDisc").value || 1, ordem: +r.querySelector("#fOrd").value || 1, horas: +r.querySelector("#fHor").value || 0, titulo: t, descricao: r.querySelector("#fDes").value.trim(), previa_texto: r.querySelector("#fPrevTxt").value.trim(), previa: r.querySelector("#fPrev").checked, apostila_amostra: r.querySelector("#fAmo").checked },
+          { video_url: r.querySelector("#fVid").value.trim(), audio_url: r.querySelector("#fAud").value.trim(), pdf_url: r.querySelector("#fPdf").value.trim() }
         );
         await API.saveQuestoes(id || (a == null ? void 0 : a.id), lista);
         S.aulas = await API.aulas();
@@ -2546,14 +2546,14 @@ function dlgCurso(c) {
     <div id="kPrev" style="margin-top:10px;border-radius:8px;overflow:hidden;border:1px solid #E1D4B2"></div>
     <button type="button" class="btn btn-line btn-sm" id="kSemCapa" style="margin-top:8px">Usar capa padrão da ETU</button>` : ""}
     <div class="msg hidden" id="mK"></div>
-    <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-gold" id="kSalvar">Salvar curso</button></div>`, (r2, close) => {
+    <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-gold" id="kSalvar">Salvar curso</button></div>`, (r, close) => {
     const prev = () => {
-      const p = r2.querySelector("#kPrev");
-      if (p) p.innerHTML = capaHTML({ titulo: r2.querySelector("#kTit").value || "Título do curso", capa }, 140);
+      const p = r.querySelector("#kPrev");
+      if (p) p.innerHTML = capaHTML({ titulo: r.querySelector("#kTit").value || "Título do curso", capa }, 140);
     };
     prev();
-    r2.querySelector("#kTit").oninput = prev;
-    const fi = r2.querySelector("#kCapa");
+    r.querySelector("#kTit").oninput = prev;
+    const fi = r.querySelector("#kCapa");
     if (fi) fi.onchange = async () => {
       const f = fi.files[0];
       if (!f) return;
@@ -2571,16 +2571,16 @@ function dlgCurso(c) {
       capa = cv.toDataURL("image/jpeg", 0.8);
       prev();
     };
-    const sc = r2.querySelector("#kSemCapa");
+    const sc = r.querySelector("#kSemCapa");
     if (sc) sc.onclick = () => {
       capa = "";
       prev();
     };
-    r2.querySelector("#kSalvar").onclick = async () => {
-      const t = r2.querySelector("#kTit").value.trim();
-      if (!t) return show(r2.querySelector("#mK"), "Informe o título do curso.", "err");
-      const obj = { id: (c == null ? void 0 : c.id) || slug(t), tipo: (c == null ? void 0 : c.tipo) || "extra", nivel: (c == null ? void 0 : c.nivel) || 0, titulo: t, cat: r2.querySelector("#kCat").value.trim() || "Curso Extra", desc: r2.querySelector("#kDesc").value.trim(), ordem: +r2.querySelector("#kOrd").value || 0, ativo: r2.querySelector("#kAtivo").checked, oferece_certificado: r2.querySelector("#kCert").checked, em_breve: r2.querySelector("#kBreve").checked, capa };
-      const linhas = r2.querySelector("#kDisc").value.split("\n").map((x) => x.trim()).filter(Boolean).map((x) => {
+    r.querySelector("#kSalvar").onclick = async () => {
+      const t = r.querySelector("#kTit").value.trim();
+      if (!t) return show(r.querySelector("#mK"), "Informe o título do curso.", "err");
+      const obj = { id: (c == null ? void 0 : c.id) || slug(t), tipo: (c == null ? void 0 : c.tipo) || "extra", nivel: (c == null ? void 0 : c.nivel) || 0, titulo: t, cat: r.querySelector("#kCat").value.trim() || "Curso Extra", desc: r.querySelector("#kDesc").value.trim(), ordem: +r.querySelector("#kOrd").value || 0, ativo: r.querySelector("#kAtivo").checked, oferece_certificado: r.querySelector("#kCert").checked, em_breve: r.querySelector("#kBreve").checked, capa };
+      const linhas = r.querySelector("#kDisc").value.split("\n").map((x) => x.trim()).filter(Boolean).map((x) => {
         const p = x.split(/\s+[—-]\s+/);
         return { nome: p[0].trim(), descricao: (p.slice(1).join(" — ") || "").trim() };
       });
@@ -2594,7 +2594,7 @@ function dlgCurso(c) {
         close();
         drawCursosAdm();
       } catch (e) {
-        show(r2.querySelector("#mK"), e.message, "err");
+        show(r.querySelector("#mK"), e.message, "err");
       }
     };
   });
@@ -2615,7 +2615,7 @@ async function drawArquivos() {
   S.estudos.forEach((e) => {
     if (e.pdf_url) rows.push({ t: e.titulo, o: "Biblioteca gratuita · " + e.tipo, ac: "Grátis (ler e baixar)", u: e.pdf_url });
   });
-  el.innerHTML = rows.map((r2) => `<tr><td><b>${esc(r2.t)}</b></td><td>${esc(r2.o)}</td><td>${esc(r2.ac)}</td><td><div class="chips"><a class="btn btn-line btn-sm" href="${esc(r2.u)}" target="_blank" rel="noopener">Abrir</a>${/drive\.google/.test(r2.u) ? `<a class="btn btn-line btn-sm" href="${esc(driveDownload(r2.u))}" target="_blank" rel="noopener">Baixar</a>` : ""}</div></td></tr>`).join("") || '<tr><td colspan="4">Nenhum arquivo ainda.</td></tr>';
+  el.innerHTML = rows.map((r) => `<tr><td><b>${esc(r.t)}</b></td><td>${esc(r.o)}</td><td>${esc(r.ac)}</td><td><div class="chips"><a class="btn btn-line btn-sm" href="${esc(r.u)}" target="_blank" rel="noopener">Abrir</a>${/drive\.google/.test(r.u) ? `<a class="btn btn-line btn-sm" href="${esc(driveDownload(r.u))}" target="_blank" rel="noopener">Baixar</a>` : ""}</div></td></tr>`).join("") || '<tr><td colspan="4">Nenhum arquivo ainda.</td></tr>';
 }
 function drawEstudosAdm() {
   const el = $("#tbEstudos");
@@ -2644,18 +2644,18 @@ function dlgEstudo(e) {
     <div class="grid2"><div><label for="esOrd">Ordem</label><input id="esOrd" type="number" value="${(_a = e == null ? void 0 : e.ordem) != null ? _a : S.estudos.length + 1}"></div>
     <div class="check" style="margin-top:42px"><input type="checkbox" id="esAt" ${(e == null ? void 0 : e.ativo) === false ? "" : "checked"}><label for="esAt" style="margin:0;font-family:inherit;font-size:16px;letter-spacing:0;color:var(--ink);font-weight:400">Visível</label></div></div>
     <div class="msg hidden" id="mEs"></div>
-    <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-gold" id="esOk">Salvar</button></div>`, (r2, close) => {
-    bindUploads(r2);
-    r2.querySelector("#esOk").onclick = async () => {
-      const t = r2.querySelector("#esTit").value.trim();
-      if (!t) return show(r2.querySelector("#mEs"), "Informe o título.", "err");
+    <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-gold" id="esOk">Salvar</button></div>`, (r, close) => {
+    bindUploads(r);
+    r.querySelector("#esOk").onclick = async () => {
+      const t = r.querySelector("#esTit").value.trim();
+      if (!t) return show(r.querySelector("#mEs"), "Informe o título.", "err");
       try {
-        await API.saveEstudo({ id: e == null ? void 0 : e.id, tipo: r2.querySelector("#esTipo").value, titulo: t, descricao: r2.querySelector("#esDesc").value.trim(), pdf_url: r2.querySelector("#esPdf").value.trim(), ordem: +r2.querySelector("#esOrd").value || 0, ativo: r2.querySelector("#esAt").checked });
+        await API.saveEstudo({ id: e == null ? void 0 : e.id, tipo: r.querySelector("#esTipo").value, titulo: t, descricao: r.querySelector("#esDesc").value.trim(), pdf_url: r.querySelector("#esPdf").value.trim(), ordem: +r.querySelector("#esOrd").value || 0, ativo: r.querySelector("#esAt").checked });
         S.estudos = await API.estudos();
         close();
         drawEstudosAdm();
       } catch (er) {
-        show(r2.querySelector("#mEs"), er.message, "err");
+        show(r.querySelector("#mEs"), er.message, "err");
       }
     };
   });
@@ -2687,57 +2687,57 @@ function dlgMural(m) {
     <div id="muDtBox"><label for="muDt">Data e hora do evento</label><input id="muDt" type="datetime-local" value="${esc(muDt)}"></div>
     <p style="font-size:14.5px;color:var(--muted);margin:6px 0 0">Áudio e Podcast aparecem em “Áudios e podcast”. Pergunta e resposta aparece em “Perguntas teológicas” (título = pergunta; texto = resposta). Enquete: escreva a pergunta no título e as opções acima. Desafio bíblico: pergunta no título, alternativas acima com * antes da certa, e a explicação com o texto bíblico no campo Texto. Pedido de oração: publique só com autorização e sem o nome. Evento: aparece na Agenda e avisa no dia. Concluinte: nome do aluno no título (com autorização) e o curso no texto.</p>
     <div class="msg hidden" id="mMu"></div>
-    <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-gold" id="salvarMu">Salvar</button></div>`, (r2, close) => {
-    const muT = r2.querySelector("#muTipo"), muB = r2.querySelector("#muOpBox");
+    <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-gold" id="salvarMu">Salvar</button></div>`, (r, close) => {
+    const muT = r.querySelector("#muTipo"), muB = r.querySelector("#muOpBox");
     const muF = () => {
       const v = muT.value;
       muB.style.display = v === "Enquete" || v === "Desafio bíblico" ? "" : "none";
-      r2.querySelector("#muOpsLb").textContent = v === "Desafio bíblico" ? "Alternativas (uma por linha; coloque * antes da certa)" : "Opções da enquete (uma por linha, até 10)";
-      r2.querySelector("#muNivBox").style.display = v === "Desafio bíblico" ? "" : "none";
-      r2.querySelector("#muDtBox").style.display = v === "Evento" ? "" : "none";
+      r.querySelector("#muOpsLb").textContent = v === "Desafio bíblico" ? "Alternativas (uma por linha; coloque * antes da certa)" : "Opções da enquete (uma por linha, até 10)";
+      r.querySelector("#muNivBox").style.display = v === "Desafio bíblico" ? "" : "none";
+      r.querySelector("#muDtBox").style.display = v === "Evento" ? "" : "none";
     };
     muT.onchange = muF;
     muF();
-    r2.querySelector("#salvarMu").onclick = async () => {
-      const t = r2.querySelector("#muTit").value.trim();
+    r.querySelector("#salvarMu").onclick = async () => {
+      const t = r.querySelector("#muTit").value.trim();
       if (!t) {
-        show(r2.querySelector("#mMu"), "Informe o título.", "err");
+        show(r.querySelector("#mMu"), "Informe o título.", "err");
         return;
       }
-      const tp = r2.querySelector("#muTipo").value;
-      let tx = r2.querySelector("#muTxt").value.trim();
+      const tp = r.querySelector("#muTipo").value;
+      let tx = r.querySelector("#muTxt").value.trim();
       if (tp === "Enquete") {
-        const ops = r2.querySelector("#muOps").value.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 10);
+        const ops = r.querySelector("#muOps").value.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 10);
         if (ops.length < 2) {
-          show(r2.querySelector("#mMu"), "A enquete precisa de pelo menos 2 opções.", "err");
+          show(r.querySelector("#mMu"), "A enquete precisa de pelo menos 2 opções.", "err");
           return;
         }
         tx = tx + "\n" + ETU_OPS + "\n" + ops.join("\n");
       }
       if (tp === "Desafio bíblico") {
-        const ops = r2.querySelector("#muOps").value.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 10);
+        const ops = r.querySelector("#muOps").value.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 10);
         if (ops.length < 2 || ops.filter((x) => x.startsWith("*")).length !== 1) {
-          show(r2.querySelector("#mMu"), "Escreva pelo menos 2 alternativas e marque só a certa com * no início.", "err");
+          show(r.querySelector("#mMu"), "Escreva pelo menos 2 alternativas e marque só a certa com * no início.", "err");
           return;
         }
-        tx = tx + "\n" + ETU_OPS + "\n#" + r2.querySelector("#muNiv").value + "\n" + ops.join("\n");
+        tx = tx + "\n" + ETU_OPS + "\n#" + r.querySelector("#muNiv").value + "\n" + ops.join("\n");
       }
       if (tp === "Evento") {
-        const d = r2.querySelector("#muDt").value;
+        const d = r.querySelector("#muDt").value;
         if (!d) {
-          show(r2.querySelector("#mMu"), "Informe a data e a hora do evento.", "err");
+          show(r.querySelector("#mMu"), "Informe a data e a hora do evento.", "err");
           return;
         }
         tx = tx + "\n" + ETU_OPS + "\n@" + d;
       }
       try {
-        await API.saveMural({ id: m == null ? void 0 : m.id, tipo: tp, titulo: t, texto: tx, video_url: r2.querySelector("#muVid").value.trim() });
+        await API.saveMural({ id: m == null ? void 0 : m.id, tipo: tp, titulo: t, texto: tx, video_url: r.querySelector("#muVid").value.trim() });
         close();
         S.mural = await API.mural();
         drawMural();
         renderTicker();
       } catch (e) {
-        show(r2.querySelector("#mMu"), e.message, "err");
+        show(r.querySelector("#mMu"), e.message, "err");
       }
     };
   });
@@ -2776,8 +2776,8 @@ function drawConfig() {
   $("#configPanel").innerHTML = API.demo ? `<h3>Modo demonstração</h3><p>A plataforma está funcionando apenas neste navegador, para você conhecer e testar. Para receber alunos de verdade — com contas próprias, e-mail de “esqueci a senha” e acesso pelo celular de cada um — preencha o bloco <b>CONFIG</b> no início do código com os dados do seu projeto Supabase, como explicado no guia de ativação.</p>
      <div class="res"><button class="btn btn-red btn-sm" id="resetDemo">Apagar dados de teste</button></div>` : `<h3>Plataforma ativa</h3><p>Conectada ao banco de dados da escola. Novos alunos se inscrevem pela página de inscrição e aparecem na aba “Alunos”, aguardando a liberação do acesso.</p>
      <p>Para tornar outra pessoa administradora, marque a coluna <b>is_admin</b> do perfil dela no painel do Supabase.</p>`;
-  const r2 = $("#resetDemo");
-  if (r2) r2.onclick = () => confirmBox("Apagar todos os dados de teste e voltar ao início?", async () => {
+  const r = $("#resetDemo");
+  if (r) r.onclick = () => confirmBox("Apagar todos os dados de teste e voltar ao início?", async () => {
     API.reset();
     await API.signOut();
     await refreshUser();
@@ -2820,16 +2820,16 @@ document.addEventListener("click", (e) => {
 });
 function drawValidar() {
   const ir = async () => {
-    const c = $("#vdIn").value.trim().toUpperCase(), r2 = $("#vdRes");
+    const c = $("#vdIn").value.trim().toUpperCase(), r = $("#vdRes");
     if (!c) {
-      r2.innerHTML = "";
+      r.innerHTML = "";
       return;
     }
     try {
       const L = await API.validarDoc(c);
-      r2.innerHTML = L.length ? L.map((d) => `<div class="vf ${d.situacao === "válido" ? "ok" : "ind"}"><b class="t">Documento localizado no registro da Escola Teológica União</b>${d.tipo === "certificado" ? "Certificado" : "Carteira de estudante"} de <b>${esc(d.nome)}</b> — ${esc(d.curso)}.<br>Emitido em ${fmtDate(String(d.emitido_em).slice(0, 10))}.${d.situacao && d.situacao !== "válido" ? `<br><b>Situação: ${esc(d.situacao)}</b>` : ""}</div>`).join("") : `<div class="vf no"><b class="t">✕ Código não encontrado</b>Este código não corresponde a nenhum documento emitido pela Escola Teológica União. Confira se foi digitado corretamente. Se persistir, o documento pode ser falso: avise a Direção pelo WhatsApp oficial.</div>`;
+      r.innerHTML = L.length ? L.map((d) => `<div class="vf ${d.situacao === "válido" ? "ok" : "ind"}"><b class="t">Documento localizado no registro da Escola Teológica União</b>${d.tipo === "certificado" ? "Certificado" : "Carteira de estudante"} de <b>${esc(d.nome)}</b> — ${esc(d.curso)}.<br>Emitido em ${fmtDate(String(d.emitido_em).slice(0, 10))}.${d.situacao && d.situacao !== "válido" ? `<br><b>Situação: ${esc(d.situacao)}</b>` : ""}</div>`).join("") : `<div class="vf no"><b class="t">✕ Código não encontrado</b>Este código não corresponde a nenhum documento emitido pela Escola Teológica União. Confira se foi digitado corretamente. Se persistir, o documento pode ser falso: avise a Direção pelo WhatsApp oficial.</div>`;
     } catch (e) {
-      r2.innerHTML = `<div class="vf ind"><b class="t">Validação indisponível no momento</b>${esc(e.message)}</div>`;
+      r.innerHTML = `<div class="vf ind"><b class="t">Validação indisponível no momento</b>${esc(e.message)}</div>`;
     }
   };
   $("#vdBt").onclick = ir;
@@ -3072,7 +3072,7 @@ function drawSino() {
     const novos = avisos().filter((a) => !ja.includes(String(a.id)) && !v.includes(String(a.id)));
     localStorage.setItem(kN, JSON.stringify([...new Set(ja.concat(ids))].slice(-300)));
     if (novos.length && "Notification" in window && Notification.permission === "granted" && navigator.serviceWorker)
-      navigator.serviceWorker.ready.then((r2) => novos.slice(0, 3).forEach((a) => r2.showNotification("Escola Teológica União", { body: a.titulo, icon: "./icone-192.png", badge: "./selo-notif.png", tag: "aviso-" + a.id, data: { url: "./#inicio" } }))).catch(() => {
+      navigator.serviceWorker.ready.then((r) => novos.slice(0, 3).forEach((a) => r.showNotification("Escola Teológica União", { body: a.titulo, icon: "./icone-192.png", badge: "./selo-notif.png", tag: "aviso-" + a.id, data: { url: "./#inicio" } }))).catch(() => {
       });
   } catch (_) {
   }
@@ -3103,12 +3103,12 @@ $("#sinoBt").onclick = async () => {
 };
 setTimeout(drawSino, 1500);
 function topo() {
-  const r2 = document.documentElement, v = r2.style.scrollBehavior;
-  r2.style.scrollBehavior = "auto";
+  const r = document.documentElement, v = r.style.scrollBehavior;
+  r.style.scrollBehavior = "auto";
   window.scrollTo(0, 0);
   setTimeout(() => {
     window.scrollTo(0, 0);
-    r2.style.scrollBehavior = v;
+    r.style.scrollBehavior = v;
   }, 80);
 }
 document.addEventListener("click", (e) => {
@@ -3186,18 +3186,18 @@ async function drawVerificar() {
   const L = await API.canais();
   $("#vfLista").innerHTML = L.map((c) => `<div class="vf-l"><span>${esc(c.tipo)}</span><b>${esc(c.valor)}</b><span style="flex-basis:100%">${esc(c.descricao || "")}</span></div>`).join("");
   const ir = () => {
-    const t = $("#vfIn").value.trim(), r2 = $("#vfRes");
+    const t = $("#vfIn").value.trim(), r = $("#vfRes");
     if (!t) {
-      r2.innerHTML = "";
+      r.innerHTML = "";
       return;
     }
     const n = normCanal(t);
     if (!n.v || n.k === "num" && n.v.length < 8) {
-      r2.innerHTML = `<div class="vf ind"><b class="t">Não foi possível conferir</b>Digite o número completo com DDD, o e-mail inteiro ou o endereço do site.</div>`;
+      r.innerHTML = `<div class="vf ind"><b class="t">Não foi possível conferir</b>Digite o número completo com DDD, o e-mail inteiro ou o endereço do site.</div>`;
       return;
     }
     const ok = L.find((c) => canalBate(c, t));
-    r2.innerHTML = ok ? `<div class="vf ok"><b class="t">✓ Canal oficial da Escola Teológica União</b>${esc(ok.tipo)}: <b>${esc(ok.valor)}</b>${ok.descricao ? " — " + esc(ok.descricao) : ""}.<br>Mesmo assim, nunca informe a sua senha a ninguém.</div>` : `<div class="vf no"><b class="t">✕ Este contato NÃO pertence à Escola Teológica União</b>Não é a Direção nem a escola. Não pague, não envie documentos, fotos ou códigos e não clique em links recebidos dele.<div class="res" style="margin-top:10px"><a class="btn btn-red btn-sm" target="_blank" rel="noopener" href="https://wa.me/${CONFIG.WHATSAPP_LINK}?text=${encodeURIComponent("A paz do Senhor. Recebi contato em nome da Escola Teológica União que NÃO é oficial: " + t)}">Avisar a Direção pelo WhatsApp oficial</a></div></div>`;
+    r.innerHTML = ok ? `<div class="vf ok"><b class="t">✓ Canal oficial da Escola Teológica União</b>${esc(ok.tipo)}: <b>${esc(ok.valor)}</b>${ok.descricao ? " — " + esc(ok.descricao) : ""}.<br>Mesmo assim, nunca informe a sua senha a ninguém.</div>` : `<div class="vf no"><b class="t">✕ Este contato NÃO pertence à Escola Teológica União</b>Não é a Direção nem a escola. Não pague, não envie documentos, fotos ou códigos e não clique em links recebidos dele.<div class="res" style="margin-top:10px"><a class="btn btn-red btn-sm" target="_blank" rel="noopener" href="https://wa.me/${CONFIG.WHATSAPP_LINK}?text=${encodeURIComponent("A paz do Senhor. Recebi contato em nome da Escola Teológica União que NÃO é oficial: " + t)}">Avisar a Direção pelo WhatsApp oficial</a></div></div>`;
   };
   $("#vfBt").onclick = ir;
   $("#vfIn").onkeydown = (e) => {
@@ -3550,7 +3550,7 @@ async function drawContab() {
   $$("#contabPanel [data-recibo]").forEach((b) => b.onclick = () => recibo(L.find((x) => String(x.id) === b.dataset.recibo)));
   $("#cxCsv").onclick = () => {
     const lin = [["Data", "Tipo", "Categoria", "Descrição", "Forma", "Documento", "Valor"]].concat(doAno.slice().sort((a2, b) => a2.data < b.data ? -1 : 1).map((l) => [fmtDate(l.data), l.tipo === "entrada" ? "Entrada" : "Saída", l.categoria, l.descricao || "", l.forma || "", l.documento || "", numBR(l.valor).toFixed(2).replace(".", ",")]));
-    const csv = "\uFEFF" + lin.map((r2) => r2.map((x) => '"' + String(x).replace(/"/g, '""') + '"').join(";")).join("\r\n");
+    const csv = "\uFEFF" + lin.map((r) => r.map((x) => '"' + String(x).replace(/"/g, '""') + '"').join(";")).join("\r\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     a.download = `caixa-ETU-${ano}.csv`;
@@ -3572,15 +3572,15 @@ async function drawContab() {
     if (!((_a2 = S.profile) == null ? void 0 : _a2.is_admin)) return;
     const q = $("#cxPerg").value.trim();
     if (!q) return;
-    const botao = $("#cxPergBt"), r2 = $("#cxResp");
+    const botao = $("#cxPergBt"), r = $("#cxResp");
     botao.disabled = true;
-    r2.textContent = "Consultando…";
+    r.textContent = "Consultando…";
     try {
       const d = await API.perguntarContador([{ role: "user", content: q }], $("#cxModo").value);
       if (!((_b = S.profile) == null ? void 0 : _b.is_admin)) return;
-      r2.textContent = d.resposta + (((_c = d.fontes) == null ? void 0 : _c.length) ? "\n\nManuais consultados: " + [...new Set(d.fontes)].join("; ") : "");
+      r.textContent = d.resposta + (((_c = d.fontes) == null ? void 0 : _c.length) ? "\n\nManuais consultados: " + [...new Set(d.fontes)].join("; ") : "");
     } catch (e) {
-      r2.textContent = e.message;
+      r.textContent = e.message;
     } finally {
       botao.disabled = false;
     }
@@ -3771,7 +3771,7 @@ $("#fotoIn").onchange = async (e) => {
     const W = 300, H = 400, cv = document.createElement("canvas");
     cv.width = W;
     cv.height = H;
-    const r2 = Math.max(W / img.width, H / img.height), w = img.width * r2, h = img.height * r2;
+    const r = Math.max(W / img.width, H / img.height), w = img.width * r, h = img.height * r;
     cv.getContext("2d").drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
     const data = cv.toDataURL("image/jpeg", 0.85);
     await API.salvarFoto(data);
@@ -3873,10 +3873,10 @@ async function lerArquivo(f) {
   if (f.type === "application/pdf") {
     if (f.size > 2.5 * 1024 * 1024) throw new Error("O PDF é muito grande (máximo 2,5 MB). Envie uma foto ou print do comprovante.");
     return await new Promise((ok, no) => {
-      const r2 = new FileReader();
-      r2.onload = () => ok(r2.result);
-      r2.onerror = no;
-      r2.readAsDataURL(f);
+      const r = new FileReader();
+      r.onload = () => ok(r.result);
+      r.onerror = no;
+      r.readAsDataURL(f);
     });
   }
   const img = await new Promise((ok, no) => {
@@ -3904,9 +3904,9 @@ $("#fComp").onsubmit = async (e) => {
   btn.textContent = "Enviando…";
   try {
     const arq = await lerArquivo(f);
-    const r2 = await API.enviarComprovante(cid, $("#cValor").value.trim(), arq);
+    const r = await API.enviarComprovante(cid, $("#cValor").value.trim(), arq);
     await refreshUser();
-    const dias = (r2 == null ? void 0 : r2.dias) || 0;
+    const dias = (r == null ? void 0 : r.dias) || 0;
     m.className = "msg ok";
     m.innerHTML = dias ? `Comprovante recebido! O <b>${esc(curso(cid).titulo)}</b> foi liberado provisoriamente por ${dias} dias enquanto a direção confere o pagamento. <a href="#curso-${cid}">Começar a estudar</a>` : `Comprovante recebido! A direção vai conferir o pagamento. Acompanhe em “Minha Área › Meus pagamentos”.`;
     m.classList.remove("hidden");
@@ -3955,8 +3955,8 @@ async function drawPag() {
       const blob = await (await fetch(arq)).blob();
       const url = URL.createObjectURL(blob);
       modal(`<h3>Comprovante (PDF)</h3><p><a class="btn btn-gold" href="${url}" target="_blank" rel="noopener">Abrir o PDF</a></p><div class="acts"><button class="btn btn-line" data-close>Fechar</button></div>`);
-    } else modal(`<h3>Comprovante</h3><img src="${arq}" alt="Comprovante de pagamento" style="width:100%;border:1px solid #E1D4B2;border-radius:8px;margin-top:10px"><div class="acts"><button class="btn btn-line" data-close>Fechar</button></div>`, (r2) => {
-      r2.querySelector(".box").style.maxWidth = "640px";
+    } else modal(`<h3>Comprovante</h3><img src="${arq}" alt="Comprovante de pagamento" style="width:100%;border:1px solid #E1D4B2;border-radius:8px;margin-top:10px"><div class="acts"><button class="btn btn-line" data-close>Fechar</button></div>`, (r) => {
+      r.querySelector(".box").style.maxWidth = "640px";
     });
   });
   $$("[data-okcomp]").forEach((b) => b.onclick = () => {
@@ -3968,18 +3968,18 @@ async function drawPag() {
       <label for="cfExp">Acesso até (próximo vencimento)</label><input type="date" id="cfExp" value="${x.toISOString().slice(0, 10)}">
       <div class="chips" style="margin-top:8px"><button type="button" class="btn btn-line btn-sm" data-mes="1">Mensalidade: +1 mês</button><button type="button" class="btn btn-line btn-sm" data-mes="3">+3 meses</button><button type="button" class="btn btn-line btn-sm" data-mes="6">+6 meses</button><button type="button" class="btn btn-line btn-sm" data-mes="12">Anual: +12 meses</button></div>
       <p style="font-size:14px;color:var(--muted);margin:8px 0 0">Os meses contam a partir do vencimento atual do aluno (ou de hoje, se não houver). Após o vencimento, o aluno tem ${CONFIG.TOLERANCIA_DIAS} dias de tolerância e depois é bloqueado automaticamente.</p>
-      <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-gold" id="cfOk">Confirmar e liberar</button></div>`, (r2, close) => {
+      <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-gold" id="cfOk">Confirmar e liberar</button></div>`, (r, close) => {
       var _a2;
       const al = S.alunos.find((a) => a.id === c.user_id);
       const mm = (_a2 = al == null ? void 0 : al.matriculas) == null ? void 0 : _a2.find((z) => z.curso_id === c.curso_id && !z.provisoria);
-      r2.querySelectorAll("[data-mes]").forEach((bt) => bt.onclick = () => {
+      r.querySelectorAll("[data-mes]").forEach((bt) => bt.onclick = () => {
         const base = (mm == null ? void 0 : mm.expira_em) && mm.expira_em > today() ? mm.expira_em : today();
         const d = /* @__PURE__ */ new Date(base + "T12:00:00");
         d.setMonth(d.getMonth() + +bt.dataset.mes);
-        r2.querySelector("#cfExp").value = d.toISOString().slice(0, 10);
+        r.querySelector("#cfExp").value = d.toISOString().slice(0, 10);
       });
-      r2.querySelector("#cfOk").onclick = async () => {
-        await API.decidirComprovante(c.id, true, r2.querySelector("#cfExp").value, null);
+      r.querySelector("#cfOk").onclick = async () => {
+        await API.decidirComprovante(c.id, true, r.querySelector("#cfExp").value, null);
         close();
         await renderAdmin();
         $("[data-tab=pagamentos]").click();
@@ -3990,9 +3990,9 @@ async function drawPag() {
     const c = l.find((x) => x.id === b.dataset.nocomp);
     modal(`<h3>Recusar comprovante</h3><p>O acesso provisório deste curso será retirado. Informe o motivo para o aluno.</p>
       <label for="rcObs">Motivo</label><input id="rcObs" value="Pagamento não identificado. Fale com a direção pelo WhatsApp.">
-      <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-red" id="rcOk">Recusar</button></div>`, (r2, close) => {
-      r2.querySelector("#rcOk").onclick = async () => {
-        await API.decidirComprovante(c.id, false, null, r2.querySelector("#rcObs").value.trim());
+      <div class="acts"><button class="btn btn-line" data-close>Cancelar</button><button class="btn btn-red" id="rcOk">Recusar</button></div>`, (r, close) => {
+      r.querySelector("#rcOk").onclick = async () => {
+        await API.decidirComprovante(c.id, false, null, r.querySelector("#rcObs").value.trim());
         close();
         await renderAdmin();
         $("[data-tab=pagamentos]").click();
@@ -4443,16 +4443,16 @@ async function aiEnviar() {
   const w = aiAdd("Escrevendo…", "bot");
   AI.busy = true;
   try {
-    let r2;
+    let r;
     const usaIA = !API.demo && AI.cfg && AI.cfg.ativo && !!S.user;
     if (usaIA) {
       const d = await API.perguntar(AI.hist.slice(-12));
-      r2 = d.resposta;
+      r = d.resposta;
       if (d.encaminhado) setTimeout(() => aiAdd("Seu pedido foi registrado no painel da direção. A resposta chegará pelo contato do seu cadastro.", "bot"), 300);
-    } else if (!API.demo && AI.cfg && AI.cfg.ativo && !S.user) r2 = faqResposta(t, false) + "\n\nPara dúvidas de estudo bíblico, entre na Área do Aluno: o assistente completo atende os alunos matriculados.";
-    else r2 = API.demo ? (await API.perguntar(AI.hist)).resposta : faqResposta(t, false);
-    w.textContent = r2;
-    AI.hist.push({ role: "assistant", content: r2 });
+    } else if (!API.demo && AI.cfg && AI.cfg.ativo && !S.user) r = faqResposta(t, false) + "\n\nPara dúvidas de estudo bíblico, entre na Área do Aluno: o assistente completo atende os alunos matriculados.";
+    else r = API.demo ? (await API.perguntar(AI.hist)).resposta : faqResposta(t, false);
+    w.textContent = r;
+    AI.hist.push({ role: "assistant", content: r });
   } catch (e) {
     w.textContent = e.message;
   }
@@ -4561,12 +4561,12 @@ async function drawAtend() {
   }));
   $$("#atPanel [data-ens]").forEach((b) => b.onclick = async () => {
     const x = L.find((y) => String(y.id) === b.dataset.ens);
-    const r2 = resp(x.id);
-    if (!r2) return show($("#mAt"), "Escreva a resposta antes de ensinar ao assistente.", "err");
+    const r = resp(x.id);
+    if (!r) return show($("#mAt"), "Escreva a resposta antes de ensinar ao assistente.", "err");
     try {
       const c = __spreadValues(__spreadValues({}, demoAi()), await API.aiConfig() || {});
       const novo = (c.conhecimento ? c.conhecimento + "\n\n" : "") + `Pergunta: ${x.mensagem}
-Resposta da direção: ${r2}`;
+Resposta da direção: ${r}`;
       await API.saveAiConfig(__spreadProps(__spreadValues({}, c), { conhecimento: novo }));
       show($("#mAt"), "Resposta acrescentada à base de conhecimento do assistente.", "ok");
     } catch (e) {
@@ -4858,16 +4858,16 @@ async function dlgCarteirinha(a) {
   }).join("")}</select>
     <label for="cardPDF">Carteirinha pronta (PDF, até 10 MB)</label><input id="cardPDF" type="file" accept="application/pdf,.pdf">
     <p>Confira o nome e os dados no PDF. Ao enviar, o arquivo será disponibilizado somente para este aluno e a Direção. Um novo envio substitui a versão disponível.</p>
-    <div id="cardMsg" class="msg hidden" role="status"></div><div class="acts"><button class="btn btn-gold" id="cardEnviar">Enviar e avisar o aluno</button><button class="btn btn-line" data-close>Fechar</button></div>` : '<p>Cadastre a matrícula do aluno antes de enviar a carteirinha.</p><button class="btn btn-line" data-close>Fechar</button>'}`, (r2) => {
-    const b = r2.querySelector("#cardEnviar");
+    <div id="cardMsg" class="msg hidden" role="status"></div><div class="acts"><button class="btn btn-gold" id="cardEnviar">Enviar e avisar o aluno</button><button class="btn btn-line" data-close>Fechar</button></div>` : '<p>Cadastre a matrícula do aluno antes de enviar a carteirinha.</p><button class="btn btn-line" data-close>Fechar</button>'}`, (r) => {
+    const b = r.querySelector("#cardEnviar");
     if (!b) return;
     b.onclick = async () => {
       b.disabled = true;
-      const msg = r2.querySelector("#cardMsg");
+      const msg = r.querySelector("#cardMsg");
       try {
         if (API.demo) throw new Error("O envio real estará disponível após ligar o banco de dados da escola.");
-        await API.publicarCarteirinha(a.id, r2.querySelector("#cardCurso").value, r2.querySelector("#cardPDF").files[0]);
-        r2.querySelector("#cardPDF").value = "";
+        await API.publicarCarteirinha(a.id, r.querySelector("#cardCurso").value, r.querySelector("#cardPDF").files[0]);
+        r.querySelector("#cardPDF").value = "";
         show(msg, "Carteirinha enviada. O aviso está disponível na conta do aluno.", "ok");
       } catch (e) {
         show(msg, e.message, "err");
@@ -5169,8 +5169,8 @@ async function drawAnimo() {
   $$("[data-animo-env]").forEach((b) => b.onclick = async () => {
     b.disabled = true;
     try {
-      const r2 = await API.animoEnviar(b.dataset.animoEnv, ["aviso", "email", "push"]);
-      msg(`Mensagem enviada: aviso no aplicativo${r2.emails ? ", e-mail" : ""}${r2.notificacoes ? ", notificação no celular" : ""}.`);
+      const r = await API.animoEnviar(b.dataset.animoEnv, ["aviso", "email", "push"]);
+      msg(`Mensagem enviada: aviso no aplicativo${r.emails ? ", e-mail" : ""}${r.notificacoes ? ", notificação no celular" : ""}.`);
       setTimeout(drawAnimo, 800);
     } catch (e) {
       try {
@@ -5248,9 +5248,9 @@ async function drawLembretes() {
         m.textContent = "Permissão não concedida.";
         return;
       }
-      const r2 = reg || await navigator.serviceWorker.register("./sw.js");
+      const r = reg || await navigator.serviceWorker.register("./sw.js");
       await navigator.serviceWorker.ready;
-      const s = await r2.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ParaBytes(chave) });
+      const s = await r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ParaBytes(chave) });
       await API.pushSalvar(s);
       drawLembretes();
     } catch (e) {
@@ -5270,10 +5270,10 @@ const DIV_PERGUNTAS = [
 ];
 let DIV = { links: {}, msgs: [], img: null, texto: "", brasao: null, selo: null };
 function divCarregaImg(src) {
-  return new Promise((r2) => {
+  return new Promise((r) => {
     const i = new Image();
-    i.onload = () => r2(i);
-    i.onerror = () => r2(null);
+    i.onload = () => r(i);
+    i.onerror = () => r(null);
     i.src = src;
   });
 }
@@ -5374,10 +5374,10 @@ async function divImagem(o) {
 }
 function divRodape(longa) {
   const L = DIV.links || {};
-  let r2 = "\n\n🔗 *Plataforma da escola:* " + DIV_SITE;
-  if (L.grupo_whatsapp) r2 += "\n👥 *Grupo de estudos:* " + L.grupo_whatsapp;
-  if (longa) r2 += "\n▶️ *Canal no YouTube:* " + (L.canal_youtube || DIV_YT_PADRAO);
-  return r2 + "\n\n*Escola Teológica União*\nFormação Bíblica, Teológica e Ministerial";
+  let r = "\n\n🔗 *Plataforma da escola:* " + DIV_SITE;
+  if (L.grupo_whatsapp) r += "\n👥 *Grupo de estudos:* " + L.grupo_whatsapp;
+  if (longa) r += "\n▶️ *Canal no YouTube:* " + (L.canal_youtube || DIV_YT_PADRAO);
+  return r + "\n\n*Escola Teológica União*\nFormação Bíblica, Teológica e Ministerial";
 }
 function divMonta(tipo, longa, f) {
   const yt = DIV.links && DIV.links.canal_youtube || DIV_YT_PADRAO;
@@ -5574,11 +5574,11 @@ async function drawDivulgacao() {
     }
   };
   $("#dvGerar").onclick = async () => {
-    const r2 = divMonta($("#dvTipo").value, $("#dvTam").value === "longa", { curso: $("#dvCurso").value, titulo: $("#dvTit").value.trim(), corpo: $("#dvCorpo").value.trim(), verso: $("#dvVerso").value.trim(), ref: $("#dvRef").value.trim() });
-    const cv = await divImagem(r2.img);
+    const r = divMonta($("#dvTipo").value, $("#dvTam").value === "longa", { curso: $("#dvCurso").value, titulo: $("#dvTit").value.trim(), corpo: $("#dvCorpo").value.trim(), verso: $("#dvVerso").value.trim(), ref: $("#dvRef").value.trim() });
+    const cv = await divImagem(r.img);
     DIV.img = await new Promise((ok) => cv.toBlob(ok, "image/jpeg", 0.92));
     $("#dvImg").src = URL.createObjectURL(DIV.img);
-    $("#dvTexto").value = r2.texto;
+    $("#dvTexto").value = r.texto;
     $("#dvRes").classList.remove("hidden");
     $("#dvRes").scrollIntoView({ behavior: "smooth" });
   };
@@ -5670,8 +5670,8 @@ window.etuAtivarNotif = async function(m, depois) {
     if (p === "granted") {
       diz("ok", "Notificações ativadas. Os avisos da escola vão aparecer no sininho e na tela do celular.");
       try {
-        var r2 = await navigator.serviceWorker.ready;
-        r2.showNotification("Escola Teológica União", { body: "Notificações ativadas. A paz do Senhor!", icon: "./icone-192.png", badge: "./selo-notif.png", tag: "etu-teste" });
+        var r = await navigator.serviceWorker.ready;
+        r.showNotification("Escola Teológica União", { body: "Notificações ativadas. A paz do Senhor!", icon: "./icone-192.png", badge: "./selo-notif.png", tag: "etu-teste" });
       } catch (e) {
       }
       try {
@@ -5686,7 +5686,7 @@ window.etuAtivarNotif = async function(m, depois) {
   if (depois) depois();
 };
 (function() {
-  var VERSAO = "Versão 48 · 27/11/2026";
+  var VERSAO = "Versão 51 · 27/11/2026";
   function estadoNotif() {
     if (!("Notification" in window)) return "não disponíveis neste aparelho";
     return Notification.permission === "granted" ? "ativadas ✓" : Notification.permission === "denied" ? "bloqueadas no celular" : "desativadas";
@@ -5717,8 +5717,8 @@ window.etuAtivarNotif = async function(m, depois) {
       m.textContent = "Procurando atualização…";
       try {
         if ("serviceWorker" in navigator) {
-          var r2 = await navigator.serviceWorker.getRegistration();
-          if (r2) await r2.update();
+          var r = await navigator.serviceWorker.getRegistration();
+          if (r) await r.update();
         }
         if (window.caches) {
           var ks = await caches.keys();
@@ -5782,7 +5782,15 @@ window.etuAtivarNotif = async function(m, depois) {
     coral: { n: "Coral", g: 2, c: ["#8A3324", "#9C3C2B", "#AE4633"] },
     laranja: { n: "Laranja", g: 2, c: ["#6E2A0C", "#863512", "#9C431A"] },
     terracota: { n: "Terracota", g: 2, c: ["#6B3020", "#7D3A27", "#8F452F"] },
-    turquesa: { n: "Turquesa", g: 2, c: ["#0F4F52", "#145E62", "#1A6E72"] }
+    turquesa: { n: "Turquesa", g: 2, c: ["#0F4F52", "#145E62", "#1A6E72"] },
+    indigo: { n: "Índigo", g: 3, c: ["#1F1F5C", "#29296F", "#333384"] },
+    safira: { n: "Safira", g: 3, c: ["#0F2F66", "#153B7A", "#1C4890"] },
+    esmeralda: { n: "Esmeralda", g: 3, c: ["#0B4436", "#0F5443", "#146551"] },
+    musgo: { n: "Musgo", g: 3, c: ["#2E3A22", "#3A4A2B", "#475B35"] },
+    ardosia: { n: "Ardósia", g: 3, c: ["#2A3440", "#34404E", "#404D5D"] },
+    cobre: { n: "Cobre", g: 3, c: ["#5C2E14", "#6E381A", "#824322"] },
+    cafe: { n: "Café", g: 3, c: ["#2B1D16", "#38261D", "#463026"] },
+    berinjela: { n: "Berinjela", g: 3, c: ["#361B33", "#442240", "#532A4E"] }
   };
   var BRILHO = { suave: "brightness(.93)", normal: "none", intenso: "brightness(1.06) saturate(1.12)" };
   function ler(k, d) {
@@ -5799,11 +5807,11 @@ window.etuAtivarNotif = async function(m, depois) {
     }
   }
   function aplicaTema() {
-    var t = TEMAS[ler("etu_tema", "azul")] || TEMAS.azul, r2 = document.documentElement.style;
-    r2.filter = BRILHO[ler("etu_brilho", "normal")] || "none";
-    r2.setProperty("--navy", t.c[0]);
-    r2.setProperty("--navy2", t.c[1]);
-    r2.setProperty("--navy3", t.c[2]);
+    var t = TEMAS[ler("etu_tema", "azul")] || TEMAS.azul, r = document.documentElement.style;
+    r.filter = BRILHO[ler("etu_brilho", "normal")] || "none";
+    r.setProperty("--navy", t.c[0]);
+    r.setProperty("--navy2", t.c[1]);
+    r.setProperty("--navy3", t.c[2]);
     var m = document.querySelector('meta[name="theme-color"]');
     if (m) m.setAttribute("content", t.c[0]);
   }
@@ -5822,6 +5830,33 @@ window.etuAtivarNotif = async function(m, depois) {
     aplicaBrasao();
   };
   aplicaTema();
+  var GRUPOS = { 1: "Clássicas", 2: "Tons femininos e vivos", 3: "Tons sóbrios e profundos" };
+  function escudoSrc() {
+    var i = document.querySelector("img.crest");
+    return i && (i.dataset.orig || i.getAttribute("src")) || "brasao-redondo.webp";
+  }
+  function folha(titulo, html, montar) {
+    var o = document.createElement("div");
+    o.className = "ap-folha";
+    o.setAttribute("role", "dialog");
+    o.setAttribute("aria-modal", "true");
+    o.setAttribute("aria-label", titulo);
+    o.innerHTML = '<div class="ap-caixa"><div class="ap-topo"><b>' + titulo + '</b><button type="button" class="ap-x" aria-label="Fechar">✕</button></div><div class="ap-corpo">' + html + '</div><div class="ap-pe"><button type="button" class="btn btn-gold" data-ok>Pronto</button></div></div>';
+    document.body.appendChild(o);
+    var f = function() {
+      o.remove();
+      document.removeEventListener("keydown", k);
+    }, k = function(e) {
+      if (e.key === "Escape") f();
+    };
+    o.addEventListener("click", function(e) {
+      if (e.target === o || e.target.closest(".ap-x,[data-ok]")) f();
+    });
+    document.addEventListener("keydown", k);
+    montar(o);
+    var b = o.querySelector(".ap-x");
+    if (b) b.focus({ preventScroll: true });
+  }
   function painel() {
     var v = document.querySelector('[data-view="mais"] .wrap');
     if (!v || document.getElementById("etuAparencia")) return;
@@ -5829,46 +5864,66 @@ window.etuAtivarNotif = async function(m, depois) {
     d.id = "etuAparencia";
     d.className = "panel";
     d.style.cssText = "margin-top:18px;color:#1B2238;background:#FFFDF6";
-    var orig = (document.querySelector("img.crest") || {}).dataset;
-    var escudo = orig && orig.orig || "";
-    var bt = "", bt2 = "";
-    Object.keys(TEMAS).forEach(function(k) {
-      var t = TEMAS[k];
-      var h = '<button type="button" data-tema="' + k + '" title="' + t.n + '" style="display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;cursor:pointer;font-family:inherit;font-weight:600;font-size:13px;color:#1B2238;padding:4px"><span style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,' + t.c[2] + "," + t.c[0] + ');border:3px solid #E1D4B2;box-shadow:0 1px 3px rgba(0,0,0,.25)"></span>' + t.n + "</button>";
-      if (t.g === 2) bt2 += h;
-      else bt += h;
-    });
-    d.innerHTML = '<h3 style="margin:0 0 10px">Aparência</h3><p style="margin:0 0 8px;font-weight:600;color:#1B2238">Estilo do brasão</p><div style="display:flex;gap:12px;margin-bottom:16px"><button type="button" data-br="medalhao" style="flex:1;background:#fff;border:2px solid #E1D4B2;border-radius:10px;padding:10px;cursor:pointer;color:#1B2238;font-weight:600;font-family:inherit"><img src="brasao-redondo.webp" alt="" style="width:64px;height:64px;display:block;margin:0 auto 6px">Medalhão</button><button type="button" data-br="escudo" style="flex:1;background:#fff;border:2px solid #E1D4B2;border-radius:10px;padding:10px;cursor:pointer;color:#1B2238;font-weight:600;font-family:inherit"><img src="' + escudo + '" alt="" style="height:64px;display:block;margin:0 auto 6px">Escudo</button></div><p style="margin:0 0 8px;font-weight:600;color:#1B2238">Cor do aplicativo · clássicas</p><div style="display:flex;flex-wrap:wrap;gap:6px 10px">' + bt + '</div><p style="margin:14px 0 8px;font-weight:600;color:#1B2238">Cor do aplicativo · tons femininos e vivos</p><div style="display:flex;flex-wrap:wrap;gap:6px 10px">' + bt2 + '</div><p style="margin:16px 0 8px;font-weight:600;color:#1B2238">Brilho da tela</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="btn btn-line btn-sm" data-bri="suave" style="color:#1B2238">Suave</button><button type="button" class="btn btn-line btn-sm" data-bri="normal" style="color:#1B2238">Normal</button><button type="button" class="btn btn-line btn-sm" data-bri="intenso" style="color:#1B2238">Intenso</button></div><p style="margin:12px 0 0;font-size:14.5px;color:#5b6070">A escolha vale para este aparelho. Os documentos oficiais (certificados e carteirinhas) mantêm sempre o padrão da escola.</p>';
+    d.innerHTML = '<h3 style="margin:0 0 4px">Aparência do aplicativo</h3><p style="margin:0 0 14px;font-size:15.5px;color:#5b6070">Escolha a cor e o brasão do seu jeito. Vale só para este aparelho.</p><div class="ap-atual"><img id="apBr" alt=""><div><small>ESCOLHA ATUAL</small><b id="apNome"></b><span id="apNome2"></span></div><i id="apCor"></i></div><div class="ap-bts"><button type="button" class="btn btn-gold btn-sm" id="apBtCor"><i class="ap-roda"></i>Opções de cores</button><button type="button" class="btn btn-line btn-sm" id="apBtBr" style="color:#1B2238">Estilo do brasão</button></div><p style="margin:16px 0 8px;font-weight:600;color:#1B2238">Brilho da tela</p><div class="ap-seg"><button type="button" data-bri="suave">Suave</button><button type="button" data-bri="normal">Normal</button><button type="button" data-bri="intenso">Intenso</button></div><p style="margin:12px 0 0;font-size:14px;color:#5b6070">Certificados e carteirinhas mantêm sempre o padrão oficial da escola.</p>';
     v.appendChild(d);
     function marca() {
-      var tm = ler("etu_tema", "azul"), br = ler("etu_brasao", "medalhao");
-      d.querySelectorAll("[data-tema] span").forEach(function(s) {
-        s.style.borderColor = s.parentNode.dataset.tema === tm ? "#C9A24A" : "#E1D4B2";
-        s.style.outline = s.parentNode.dataset.tema === tm ? "2px solid #8C6A1E" : "none";
-      });
-      d.querySelectorAll("[data-br]").forEach(function(b) {
-        b.style.borderColor = b.dataset.br === br ? "#C9A24A" : "#E1D4B2";
-        b.style.boxShadow = b.dataset.br === br ? "0 0 0 2px #8C6A1E" : "none";
-      });
+      var tm = ler("etu_tema", "azul"), t = TEMAS[tm] || TEMAS.azul, med = ler("etu_brasao", "medalhao") === "medalhao";
+      d.querySelector("#apBr").src = med ? "brasao-redondo.webp" : escudoSrc();
+      d.querySelector("#apNome").textContent = "Cor " + t.n;
+      d.querySelector("#apNome2").textContent = "Brasão " + (med ? "Medalhão" : "Escudo");
+      d.querySelector("#apCor").style.background = "linear-gradient(135deg," + t.c[0] + "," + t.c[2] + ")";
       var bri = ler("etu_brilho", "normal");
       d.querySelectorAll("[data-bri]").forEach(function(b) {
-        b.style.background = b.dataset.bri === bri ? "#E9CF7F" : "";
+        b.setAttribute("aria-pressed", b.dataset.bri === bri);
       });
     }
-    d.querySelectorAll("[data-tema]").forEach(function(b) {
-      b.onclick = function() {
-        grava("etu_tema", b.dataset.tema);
-        aplicaTema();
-        marca();
-      };
-    });
-    d.querySelectorAll("[data-br]").forEach(function(b) {
-      b.onclick = function() {
-        grava("etu_brasao", b.dataset.br);
-        aplicaBrasao();
-        marca();
-      };
-    });
+    d.querySelector("#apBtCor").onclick = function() {
+      var h = "";
+      [1, 2, 3].forEach(function(g) {
+        h += '<p class="ap-g">' + GRUPOS[g] + '</p><div class="ap-grade">' + Object.keys(TEMAS).filter(function(k) {
+          return TEMAS[k].g === g;
+        }).map(function(k) {
+          var t = TEMAS[k];
+          return '<button type="button" data-tema="' + k + '"><span style="background:linear-gradient(135deg,' + t.c[0] + "," + t.c[2] + ')"></span>' + t.n + "</button>";
+        }).join("") + "</div>";
+      });
+      folha("Opções de cores", h, function(o) {
+        function m() {
+          var tm = ler("etu_tema", "azul");
+          o.querySelectorAll("[data-tema]").forEach(function(b) {
+            b.setAttribute("aria-pressed", b.dataset.tema === tm);
+          });
+        }
+        o.querySelectorAll("[data-tema]").forEach(function(b) {
+          b.onclick = function() {
+            grava("etu_tema", b.dataset.tema);
+            aplicaTema();
+            m();
+            marca();
+          };
+        });
+        m();
+      });
+    };
+    d.querySelector("#apBtBr").onclick = function() {
+      folha("Estilo do brasão", '<div class="ap-brs"><button type="button" data-br="medalhao"><img src="brasao-redondo.webp" alt="">Medalhão</button><button type="button" data-br="escudo"><img src="' + escudoSrc() + '" alt="">Escudo</button></div>', function(o) {
+        function m() {
+          var br = ler("etu_brasao", "medalhao");
+          o.querySelectorAll("[data-br]").forEach(function(b) {
+            b.setAttribute("aria-pressed", b.dataset.br === br);
+          });
+        }
+        o.querySelectorAll("[data-br]").forEach(function(b) {
+          b.onclick = function() {
+            grava("etu_brasao", b.dataset.br);
+            aplicaBrasao();
+            m();
+            marca();
+          };
+        });
+        m();
+      });
+    };
     d.querySelectorAll("[data-bri]").forEach(function(b) {
       b.onclick = function() {
         grava("etu_brilho", b.dataset.bri);
@@ -5877,6 +5932,7 @@ window.etuAtivarNotif = async function(m, depois) {
       };
     });
     marca();
+    if (window.etuLicoesMonta) window.etuLicoesMonta(v);
     var app = document.getElementById("etuApp");
     if (app) v.appendChild(app);
   }
@@ -6284,8 +6340,8 @@ function etuContasDesenha(L, nm) {
       }
       const reg = { tipo: "saida", data: dt, categoria: c.categoria || "Outras saídas", descricao: c.descricao, valor: v, forma: c.tipo && c.tipo.startsWith("Guia") ? "Guia" : "Boleto", documento: c.competencia ? "DAS " + c.competencia : (c.tipo || "Boleto") + " venc. " + fmtDate(c.vencimento) };
       if (comp) reg.anexo = comp;
-      const r2 = await API.salvarLancamento(reg);
-      await API.alterarContaPagar(c.id, { status: "pago", pago_em: dt, valor_pago: v, comprovante: comp, lancamento_id: r2 && r2.id && !isNaN(+r2.id) ? +r2.id : null });
+      const r = await API.salvarLancamento(reg);
+      await API.alterarContaPagar(c.id, { status: "pago", pago_em: dt, valor_pago: v, comprovante: comp, lancamento_id: r && r.id && !isNaN(+r.id) ? +r.id : null });
       if (c.competencia) etuFechGrava(c.competencia, { das: fmtDate(dt) });
       CT.pagando = null;
       drawContab();
@@ -6349,7 +6405,7 @@ function etuContasDesenha(L, nm) {
       const k = "etu_cont_notif_" + (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
       if ("Notification" in window && Notification.permission === "granted" && !localStorage.getItem(k)) {
         localStorage.setItem(k, "1");
-        navigator.serviceWorker && navigator.serviceWorker.ready.then((r2) => r2.showNotification("Contador da Direção", { body: pend[0].t + " (" + pend[0].p + ")", icon: "./icone-192.png", badge: "./selo-notif.png", tag: "etu-contador" }));
+        navigator.serviceWorker && navigator.serviceWorker.ready.then((r) => r.showNotification("Contador da Direção", { body: pend[0].t + " (" + pend[0].p + ")", icon: "./icone-192.png", badge: "./selo-notif.png", tag: "etu-contador" }));
       }
     } catch (e) {
     }
@@ -6411,15 +6467,15 @@ async function etuLigaEnquetes(root) {
   for (const b of boxes) {
     const id = b.dataset.enq, meu = meus.find((v) => String(v.mural_id) === id), msg = b.querySelector(".enq-msg");
     async function mostra() {
-      let r2 = [];
+      let r = [];
       try {
-        r2 = await API.resultado(isNaN(+id) ? id : +id);
+        r = await API.resultado(isNaN(+id) ? id : +id);
       } catch (e) {
       }
-      const tot = r2.reduce((a, x) => a + Number(x.votos), 0);
+      const tot = r.reduce((a, x) => a + Number(x.votos), 0);
       const mv = (await API.meusVotos().catch(() => [])).find((v) => String(v.mural_id) === id);
       b.querySelectorAll(".enq-op").forEach((o) => {
-        const n = Number((r2.find((x) => +x.opcao === +o.dataset.op) || {}).votos || 0), pc = tot ? Math.round(n * 100 / tot) : 0;
+        const n = Number((r.find((x) => +x.opcao === +o.dataset.op) || {}).votos || 0), pc = tot ? Math.round(n * 100 / tot) : 0;
         o.querySelector(".enq-bar").style.width = pc + "%";
         o.querySelector(".enq-p").textContent = tot ? pc + "%" : "";
         o.classList.toggle("meu", !!mv && +mv.opcao === +o.dataset.op);
@@ -6497,8 +6553,8 @@ addEventListener("load", () => setTimeout(() => {
   const V = "2026-11-25", K = "etu_diretrizes";
   function aceitou() {
     try {
-      const r2 = JSON.parse(localStorage.getItem(K) || "null");
-      return r2 && r2.v === V;
+      const r = JSON.parse(localStorage.getItem(K) || "null");
+      return r && r.v === V;
     } catch (e) {
       return false;
     }
@@ -6819,19 +6875,19 @@ function etuEmbaralha(a) {
   return a;
 }
 function etuDesafio() {
-  const r2 = $("#desafioBox");
-  if (!r2) return;
+  const r = $("#desafioBox");
+  if (!r) return;
   const rec = etuLS("etu_desafio_rec", {}), som = etuLS("etu_som", true);
-  r2.innerHTML = `<div class="dz-niveis">${Object.keys(ETU_DESAFIO).map((n) => `<button type="button" class="dz-nv" data-nv="${esc(n)}"><b>${esc(n)}</b><span>${n === "Quem sou eu?" ? "Charadas sobre personagens bíblicos" : n === "Básico" ? "Para quem está começando" : n === "Médio" ? "Doutrinas e profecia" : "Teologia, história e línguas"}</span>${rec[n] !== void 0 ? `<i>Seu recorde: ${rec[n]}</i>` : ""}</button>`).join("")}</div>
+  r.innerHTML = `<div class="dz-niveis">${Object.keys(ETU_DESAFIO).map((n) => `<button type="button" class="dz-nv" data-nv="${esc(n)}"><b>${esc(n)}</b><span>${n === "Quem sou eu?" ? "Charadas sobre personagens bíblicos" : n === "Básico" ? "Para quem está começando" : n === "Médio" ? "Doutrinas e profecia" : "Teologia, história e línguas"}</span>${rec[n] !== void 0 ? `<i>Seu recorde: ${rec[n]}</i>` : ""}</button>`).join("")}</div>
     <p class="dz-som"><label><input type="checkbox" id="dzSom" ${som ? "checked" : ""}> Som ligado</label></p>`;
   $("#dzSom").onchange = (e) => etuLSs("etu_som", e.target.checked);
-  r2.querySelectorAll("[data-nv]").forEach((b) => b.onclick = () => {
+  r.querySelectorAll("[data-nv]").forEach((b) => b.onclick = () => {
     etuSom("clique");
     etuRodada(b.dataset.nv);
   });
 }
 function etuRodada(nivel) {
-  const r2 = $("#desafioBox");
+  const r = $("#desafioBox");
   const qs = etuEmbaralha(etuDesafioBanco(nivel)).slice(0, 10).map((q) => {
     const idx = etuEmbaralha(q.o.map((_, i2) => i2));
     return __spreadProps(__spreadValues({}, q), { o: idx.map((i2) => q.o[i2]), c: idx.indexOf(q.c) });
@@ -6839,12 +6895,12 @@ function etuRodada(nivel) {
   let i = 0, pts = 0;
   const desenha = () => {
     const q = qs[i];
-    r2.innerHTML = `<div class="dz-top"><span>${esc(nivel)}</span><span>Pergunta ${i + 1} de ${qs.length}</span><span>Acertos: ${pts}</span></div><div class="dz-barra"><i style="width:${i * 100 / qs.length}%"></i></div>
+    r.innerHTML = `<div class="dz-top"><span>${esc(nivel)}</span><span>Pergunta ${i + 1} de ${qs.length}</span><span>Acertos: ${pts}</span></div><div class="dz-barra"><i style="width:${i * 100 / qs.length}%"></i></div>
       <h3 class="dz-p">${esc(q.p)}</h3><div class="dz-ops">${q.o.map((o, k) => `<button type="button" class="dz-op" data-k="${k}"><span class="dz-l">${"ABCDEFGHIJ"[k]}</span>${esc(o)}</button>`).join("")}</div><div id="dzExp"></div>`;
-    r2.querySelectorAll(".dz-op").forEach((b) => b.onclick = () => {
-      if (r2.querySelector(".dz-op.trava")) return;
+    r.querySelectorAll(".dz-op").forEach((b) => b.onclick = () => {
+      if (r.querySelector(".dz-op.trava")) return;
       const k = +b.dataset.k, ok = k === q.c;
-      r2.querySelectorAll(".dz-op").forEach((x) => {
+      r.querySelectorAll(".dz-op").forEach((x) => {
         x.classList.add("trava");
         if (+x.dataset.k === q.c) x.classList.add("certo");
       });
@@ -6858,7 +6914,7 @@ function etuRodada(nivel) {
         i++;
         if (i < qs.length) {
           desenha();
-          scrollTo({ top: Math.max(0, r2.getBoundingClientRect().top + scrollY - 120), behavior: "smooth" });
+          scrollTo({ top: Math.max(0, r.getBoundingClientRect().top + scrollY - 120), behavior: "smooth" });
         } else fim();
       };
       setTimeout(() => $("#dzExp").scrollIntoView({ behavior: "smooth", block: "nearest" }), 120);
@@ -6872,7 +6928,7 @@ function etuRodada(nivel) {
       etuLSs("etu_desafio_rec", rec);
     }
     const msg = pc === 100 ? "Gabarito perfeito! Glória a Deus pelo seu estudo." : pc >= 70 ? "Excelente! Você tem estudado a Palavra com dedicação." : pc >= 40 ? "Bom caminho! Releia as explicações e tente de novo." : "Não desanime: cada explicação é uma aula. Tente outra vez.";
-    r2.innerHTML = `<div class="dz-fim"><div class="dz-nota">${pts}<small>/${n}</small></div><h3>${esc(msg)}</h3>${novo ? '<p class="dz-rec">Novo recorde neste nível!</p>' : ""}<p>“Procura apresentar-te a Deus aprovado, como obreiro que não tem de que se envergonhar, que maneja bem a palavra da verdade” (2 Timóteo 2.15).</p>
+    r.innerHTML = `<div class="dz-fim"><div class="dz-nota">${pts}<small>/${n}</small></div><h3>${esc(msg)}</h3>${novo ? '<p class="dz-rec">Novo recorde neste nível!</p>' : ""}<p>“Procura apresentar-te a Deus aprovado, como obreiro que não tem de que se envergonhar, que maneja bem a palavra da verdade” (2 Timóteo 2.15).</p>
       <div class="acts" style="justify-content:center"><button type="button" class="btn btn-gold" id="dzDe">Jogar de novo</button><button type="button" class="btn btn-line" id="dzNiv">Escolher outro nível</button><button type="button" class="btn btn-line" id="dzSh">Desafiar um amigo</button></div></div>`;
     if (pc >= 70) {
       etuSom("vitoria");
@@ -6881,7 +6937,7 @@ function etuRodada(nivel) {
     etuGanha("desafio");
     if (pts === n) etuGanha("gabarito");
     if (nivel === "Avançado" && pts >= 8) etuGanha("avancado");
-    scrollTo({ top: Math.max(0, r2.getBoundingClientRect().top + scrollY - 120), behavior: "smooth" });
+    scrollTo({ top: Math.max(0, r.getBoundingClientRect().top + scrollY - 120), behavior: "smooth" });
     $("#dzDe").onclick = () => etuRodada(nivel);
     $("#dzNiv").onclick = etuDesafio;
     $("#dzSh").onclick = async () => {
@@ -6898,11 +6954,11 @@ ${CONFIG.LINK_PUBLICO || location.origin}#desafio`;
     };
   };
   if (!qs.length) {
-    r2.innerHTML = "<p>Nenhuma pergunta neste nível ainda.</p>";
+    r.innerHTML = "<p>Nenhuma pergunta neste nível ainda.</p>";
     return;
   }
   desenha();
-  scrollTo({ top: Math.max(0, r2.getBoundingClientRect().top + scrollY - 120), behavior: "smooth" });
+  scrollTo({ top: Math.max(0, r.getBoundingClientRect().top + scrollY - 120), behavior: "smooth" });
 }
 const ETU_CAPS = (() => {
   const l = [];
@@ -6923,8 +6979,8 @@ function etuLeituraDia(d) {
   return g.map((x) => x.i === x.f ? `${x.l} ${x.i}` : `${x.l} ${x.i}–${x.f}`).join("; ");
 }
 function etuLeitura() {
-  const r2 = $("#leituraBox");
-  if (!r2) return;
+  const r = $("#leituraBox");
+  if (!r) return;
   let ini = etuLS("etu_leitura_ini", null);
   if (!ini) {
     ini = etuHoje();
@@ -6934,7 +6990,7 @@ function etuLeitura() {
   const linha = (d) => `<label class="lt-d ${lidos[d] ? "ok" : ""} ${d === hoje ? "hoje" : ""}"><input type="checkbox" data-ld="${d}" ${lidos[d] ? "checked" : ""}><span class="lt-n">Dia ${d}</span><span class="lt-t">${esc(etuLeituraDia(d))}</span></label>`;
   let semana = "";
   for (let d = Math.max(1, hoje - 2); d <= Math.min(365, hoje + 4); d++) semana += linha(d);
-  r2.innerHTML = `<div class="panel lt-hoje"><small>LEITURA DE HOJE · DIA ${hoje} DE 365</small><h3>${esc(etuLeituraDia(hoje))}</h3><div class="progress"><i style="width:${Math.round(feitos * 100 / 365)}%"></i></div><p class="meta">${feitos} de 365 dias lidos (${Math.round(feitos * 100 / 365)}%). O plano percorre a Bíblia inteira, de Gênesis a Apocalipse, em ordem.</p></div>
+  r.innerHTML = `<div class="panel lt-hoje"><small>LEITURA DE HOJE · DIA ${hoje} DE 365</small><h3>${esc(etuLeituraDia(hoje))}</h3><div class="progress"><i style="width:${Math.round(feitos * 100 / 365)}%"></i></div><p class="meta">${feitos} de 365 dias lidos (${Math.round(feitos * 100 / 365)}%). O plano percorre a Bíblia inteira, de Gênesis a Apocalipse, em ordem.</p></div>
     <h3 style="margin:22px 0 8px">Esta semana</h3><div class="lt-lista">${semana}</div>
     <details class="perg" style="margin-top:18px"><summary>Ver o plano completo (365 dias)</summary><div class="lt-lista" id="ltTudo"></div></details>
     <p style="font-size:14.5px;color:var(--muted)">O plano começou em ${fmtDate(ini)} neste aparelho. <button type="button" class="btn btn-line btn-sm" id="ltZera">Recomeçar a partir de hoje</button></p>`;
@@ -6948,8 +7004,8 @@ function etuLeitura() {
     etuConfereMedalhas();
     etuLeitura();
   });
-  liga(r2);
-  r2.querySelector("details").ontoggle = (e) => {
+  liga(r);
+  r.querySelector("details").ontoggle = (e) => {
     const t = $("#ltTudo");
     if (e.target.open && !t.innerHTML) {
       let h = "";
@@ -6965,12 +7021,12 @@ function etuLeitura() {
   });
 }
 function etuOracao() {
-  const r2 = $("#oracaoLista");
-  if (!r2) return;
+  const r = $("#oracaoLista");
+  if (!r) return;
   const l = (S.mural || []).filter((m) => m.tipo === "Pedido de oração"), meus = etuLS("etu_orando", []);
-  r2.innerHTML = l.length ? l.map((m) => `<article class="mcard or-c"><div class="bd"><div class="mtag">PEDIDO DE ORAÇÃO</div><h3>${esc(m.titulo)}</h3>${m.texto ? `<p>${esc(etuTextoSem(m.texto))}</p>` : ""}<button type="button" class="btn ${meus.includes(String(m.id)) ? "btn-navy" : "btn-gold"} btn-sm" data-or="${esc(String(m.id))}">${meus.includes(String(m.id)) ? "✓ Estou orando" : "🙏 Estou orando"}</button><span class="or-n" data-orn="${esc(String(m.id))}"></span></div></article>`).join("") : '<div class="panel" style="grid-column:1/-1;text-align:center"><p style="margin:0">Os pedidos aprovados pela Direção aparecem aqui para que todos orem juntos.</p></div>';
-  r2.querySelectorAll("[data-or]").forEach(async (b) => {
-    const id = b.dataset.or, n = r2.querySelector(`[data-orn="${id}"]`);
+  r.innerHTML = l.length ? l.map((m) => `<article class="mcard or-c"><div class="bd"><div class="mtag">PEDIDO DE ORAÇÃO</div><h3>${esc(m.titulo)}</h3>${m.texto ? `<p>${esc(etuTextoSem(m.texto))}</p>` : ""}<button type="button" class="btn ${meus.includes(String(m.id)) ? "btn-navy" : "btn-gold"} btn-sm" data-or="${esc(String(m.id))}">${meus.includes(String(m.id)) ? "✓ Estou orando" : "🙏 Estou orando"}</button><span class="or-n" data-orn="${esc(String(m.id))}"></span></div></article>`).join("") : '<div class="panel" style="grid-column:1/-1;text-align:center"><p style="margin:0">Os pedidos aprovados pela Direção aparecem aqui para que todos orem juntos.</p></div>';
+  r.querySelectorAll("[data-or]").forEach(async (b) => {
+    const id = b.dataset.or, n = r.querySelector(`[data-orn="${id}"]`);
     const conta = async () => {
       try {
         const x = await API.resultado(isNaN(+id) ? id : +id);
@@ -7026,11 +7082,11 @@ function etuEventos() {
   }).filter((e) => e.quando && !isNaN(e.quando)).sort((a, b) => a.quando - b.quando);
 }
 function etuAgenda() {
-  const r2 = $("#agendaLista");
-  if (!r2) return;
+  const r = $("#agendaLista");
+  if (!r) return;
   const ag = Date.now() - 3 * 36e5, l = etuEventos(), prox = l.filter((e) => e.quando >= ag), pas = l.filter((e) => e.quando < ag).reverse().slice(0, 6);
   const card = (e) => `<article class="ag-c ${e.quando < ag ? "pass" : ""}"><div class="ag-d"><b>${e.quando.getDate()}</b><span>${e.quando.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "").toUpperCase()}</span></div><div class="ag-t"><h3>${esc(e.titulo)}</h3><p class="meta">${esc(e.dataTxt)}</p>${etuTextoSem(e.texto) ? `<p>${esc(etuTextoSem(e.texto))}</p>` : ""}${e.video_url ? `<a class="btn btn-gold btn-sm" href="${esc(e.video_url)}" target="_blank" rel="noopener">${e.quando < ag ? "Assistir" : "Acessar o link"}</a>` : ""}</div></article>`;
-  r2.innerHTML = (prox.length ? prox.map(card).join("") : '<div class="panel" style="text-align:center"><p style="margin:0">Nenhum evento marcado no momento. Os próximos aparecerão aqui.</p></div>') + (pas.length ? `<h3 style="margin:26px 0 10px">Eventos realizados</h3>${pas.map(card).join("")}` : "");
+  r.innerHTML = (prox.length ? prox.map(card).join("") : '<div class="panel" style="text-align:center"><p style="margin:0">Nenhum evento marcado no momento. Os próximos aparecerão aqui.</p></div>') + (pas.length ? `<h3 style="margin:26px 0 10px">Eventos realizados</h3>${pas.map(card).join("")}` : "");
 }
 (function() {
   function avisa() {
@@ -7043,7 +7099,7 @@ function etuAgenda() {
           vistos.push(String(e.id));
           etuLSs("etu_ev_avisos", vistos);
           etuAviso(`<b>Hoje: ${esc(e.titulo)}</b><span>${esc(e.dataTxt)}</span>`);
-          if ("Notification" in window && Notification.permission === "granted" && navigator.serviceWorker) navigator.serviceWorker.ready.then((r2) => r2.showNotification("Hoje na ETU: " + e.titulo, { body: e.dataTxt, icon: "./icone-192.png", badge: "./selo-notif.png", tag: "etu-ev-" + e.id }));
+          if ("Notification" in window && Notification.permission === "granted" && navigator.serviceWorker) navigator.serviceWorker.ready.then((r) => r.showNotification("Hoje na ETU: " + e.titulo, { body: e.dataTxt, icon: "./icone-192.png", badge: "./selo-notif.png", tag: "etu-ev-" + e.id }));
         }
       });
     } catch (e) {
@@ -7052,17 +7108,17 @@ function etuAgenda() {
   addEventListener("load", () => setTimeout(avisa, 4e3));
 })();
 function etuConcluintes() {
-  const r2 = $("#concLista");
-  if (!r2) return;
+  const r = $("#concLista");
+  if (!r) return;
   const l = (S.mural || []).filter((m) => m.tipo === "Concluinte");
-  r2.innerHTML = l.length ? l.map((m) => `<article class="cc-c"><div class="cc-s">🎓</div><h3>${esc(m.titulo)}</h3><p>${esc(etuTextoSem(m.texto) || "Concluiu o curso na Escola Teológica União")}</p><span>Parabéns!</span></article>`).join("") : '<div class="panel" style="grid-column:1/-1;text-align:center"><p style="margin:0">Os nomes dos alunos que concluírem os cursos, com a autorização deles, aparecerão aqui.</p></div>';
+  r.innerHTML = l.length ? l.map((m) => `<article class="cc-c"><div class="cc-s">🎓</div><h3>${esc(m.titulo)}</h3><p>${esc(etuTextoSem(m.texto) || "Concluiu o curso na Escola Teológica União")}</p><span>Parabéns!</span></article>`).join("") : '<div class="panel" style="grid-column:1/-1;text-align:center"><p style="margin:0">Os nomes dos alunos que concluírem os cursos, com a autorização deles, aparecerão aqui.</p></div>';
 }
 function etuConquistas() {
   etuConfereMedalhas();
-  const r2 = $("#conqLista");
-  if (!r2) return;
+  const r = $("#conqLista");
+  if (!r) return;
   const g = etuLS("etu_medalhas", {}), n = Object.keys(g).length;
-  r2.innerHTML = `<p style="text-align:center;font-size:17px;margin:0 0 16px">Você conquistou <b>${n} de ${ETU_MEDALHAS.length}</b> medalhas.</p><div class="cq-g">${ETU_MEDALHAS.map((m) => `<div class="cq ${g[m[0]] ? "on" : ""}"><div class="cq-i">${g[m[0]] ? "🏅" : "🔒"}</div><b>${esc(m[1])}</b><span>${esc(m[2])}</span>${g[m[0]] ? `<i>${fmtDate(g[m[0]])}</i>` : ""}</div>`).join("")}</div><p style="font-size:14.5px;color:var(--muted);text-align:center;margin-top:14px">As medalhas ficam guardadas neste aparelho.</p>`;
+  r.innerHTML = `<p style="text-align:center;font-size:17px;margin:0 0 16px">Você conquistou <b>${n} de ${ETU_MEDALHAS.length}</b> medalhas.</p><div class="cq-g">${ETU_MEDALHAS.map((m) => `<div class="cq ${g[m[0]] ? "on" : ""}"><div class="cq-i">${g[m[0]] ? "🏅" : "🔒"}</div><b>${esc(m[1])}</b><span>${esc(m[2])}</span>${g[m[0]] ? `<i>${fmtDate(g[m[0]])}</i>` : ""}</div>`).join("")}</div><p style="font-size:14.5px;color:var(--muted);text-align:center;margin-top:14px">As medalhas ficam guardadas neste aparelho.</p>`;
 }
 function etuVivoRota() {
   const h = location.hash.slice(1) || "inicio";
@@ -7749,4 +7805,306 @@ function etuOficinaAbrir() {
   }
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", () => tenta(12));
   else tenta(12);
+})();
+(function() {
+  var css = document.createElement("style");
+  css.textContent = '.ap-atual{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #E1D4B2;border-radius:14px;padding:12px 14px}.ap-atual img{width:58px;height:58px;object-fit:contain;flex:none}.ap-atual div{flex:1;min-width:0}.ap-atual small{display:block;font-size:12px;letter-spacing:.1em;color:#8C6A1E;font-weight:700}.ap-atual b{display:block;font-size:18px;color:#1B2238}.ap-atual span{font-size:15px;color:#5b6070}.ap-atual i{width:42px;height:42px;border-radius:50%;flex:none;border:3px solid #C9A24A;box-shadow:0 2px 8px rgba(0,0,0,.2)}.ap-bts{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.ap-roda{display:inline-block;width:16px;height:16px;border-radius:50%;margin-right:8px;vertical-align:-3px;background:conic-gradient(#1D3C91,#14493A,#5E1626,#82295A,#863512,#1D3C91);border:1px solid rgba(0,0,0,.2)}.ap-seg{display:inline-flex;border:1.5px solid #C9A24A;border-radius:10px;overflow:hidden}.ap-seg button{font:600 15px Georgia,serif;padding:9px 16px;min-height:42px;background:#fff;color:#1B2238;border:0;border-right:1px solid #E1D4B2;cursor:pointer}.ap-seg button:last-child{border-right:0}.ap-seg button[aria-pressed=true]{background:#E9CF7F}.ap-folha{position:fixed;inset:0;z-index:9990;background:rgba(5,10,25,.7);display:flex;align-items:flex-end;justify-content:center}.ap-caixa{background:#FFFDF6;color:#1B2238;width:100%;max-width:620px;max-height:86vh;display:flex;flex-direction:column;border-radius:18px 18px 0 0;border-top:3px solid #C9A24A;animation:apSobe .25s ease-out}@keyframes apSobe{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}@media(min-width:700px){.ap-folha{align-items:center}.ap-caixa{border-radius:18px;border:2px solid #C9A24A}}.ap-topo{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #E1D4B2}.ap-topo b{font-family:Cinzel,Georgia,serif;font-size:19px;color:#1B2238}.ap-x{width:42px;height:42px;border-radius:50%;border:1px solid #E1D4B2;background:#fff;font-size:18px;cursor:pointer;color:#1B2238}.ap-corpo{overflow:auto;padding:6px 18px 10px}.ap-pe{padding:12px 18px;border-top:1px solid #E1D4B2;text-align:right}.ap-g{margin:14px 0 8px;font-weight:700;color:#8C6A1E;font-size:14px;letter-spacing:.06em;text-transform:uppercase}.ap-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(82px,1fr));gap:10px}.ap-grade button{display:flex;flex-direction:column;align-items:center;gap:6px;background:#fff;border:1.5px solid #E1D4B2;border-radius:12px;padding:10px 4px;font:600 13.5px Georgia,serif;color:#1B2238;cursor:pointer}.ap-grade span{width:40px;height:40px;border-radius:50%;box-shadow:inset 0 0 0 2px rgba(255,255,255,.25),0 2px 6px rgba(0,0,0,.25)}.ap-grade button[aria-pressed=true]{border-color:#C9A24A;box-shadow:0 0 0 2px #8C6A1E;background:#FFF6DC}.ap-brs{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding-top:12px}.ap-brs button{background:#fff;border:2px solid #E1D4B2;border-radius:14px;padding:14px;font:600 16px Georgia,serif;color:#1B2238;cursor:pointer}.ap-brs img{display:block;height:84px;max-width:100%;object-fit:contain;margin:0 auto 8px}.ap-brs button[aria-pressed=true]{border-color:#C9A24A;box-shadow:0 0 0 2px #8C6A1E;background:#FFF6DC}.lp{margin-top:18px;background:radial-gradient(ellipse at 30% 0%,var(--navy2,#16294F),var(--navy,#0F1E3D) 70%);color:#F7F1E3;border:1.5px solid #C9A24A;border-radius:16px;padding:18px 18px 14px;position:relative;overflow:hidden}.lp small{display:block;color:#E2C47A;letter-spacing:.14em;font-weight:700;font-size:12.5px}.lp h3{font-family:Cinzel,Georgia,serif;color:#fff;font-size:21px;margin:6px 0 8px}.lp blockquote{margin:0 0 10px;font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-size:20px;line-height:1.4;border-left:3px solid #C9A24A;padding-left:12px}.lp blockquote cite{display:block;font-style:normal;font-family:Cinzel,Georgia,serif;font-size:13px;color:#E2C47A;margin-top:4px}.lp p{margin:0 0 8px;font-size:16px;line-height:1.55}.lp p b{color:#E2C47A}.lp .lp-ct{display:flex;align-items:center;justify-content:space-between;margin-top:10px}.lp-dots{display:flex;gap:6px}.lp-dots i{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.3)}.lp-dots i.on{background:#E2C47A}.lp-ct button{background:transparent;border:1px solid rgba(226,196,122,.6);color:#F7F1E3;border-radius:20px;min-width:42px;min-height:38px;cursor:pointer;font:600 14px Georgia,serif;margin-left:6px}.lp-corpo{transition:opacity .5s}.lp-corpo.sai{opacity:0}.tc{display:flex;align-items:center;gap:14px;background:linear-gradient(120deg,var(--navy,#0F1E3D),var(--navy3,#1E3463));color:#fff;border:1.5px solid #C9A24A;border-radius:16px;padding:14px 16px;cursor:pointer;width:100%;text-align:left;font-family:Georgia,serif;box-shadow:0 6px 18px rgba(0,0,0,.18)}.tc .tc-play{width:54px;height:54px;flex:none;border-radius:50%;background:#C9A24A;color:#0F1B3D;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 0 0 6px rgba(201,162,74,.25);animation:tcPulso 2.4s infinite}@keyframes tcPulso{50%{box-shadow:0 0 0 11px rgba(201,162,74,.08)}}@media(prefers-reduced-motion:reduce){.tc .tc-play{animation:none}}.tc small{display:block;color:#E2C47A;letter-spacing:.12em;font-weight:700;font-size:12px}.tc b{display:block;font-family:Cinzel,Georgia,serif;font-size:18px;line-height:1.3}.tc span{font-size:14.5px;color:#ddd5c0}.tr{position:fixed;inset:0;z-index:9996;background:radial-gradient(ellipse at 50% 0%,#1E3463,#0B1530 60%,#060B18);color:#F7F1E3;display:flex;flex-direction:column}.tr-top{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(201,162,74,.5)}.tr-top img{width:38px;height:38px}.tr-top b{flex:1;font-family:Cinzel,Georgia,serif;color:#E2C47A;font-size:16px;letter-spacing:.06em}.tr-top button{width:42px;height:42px;border-radius:50%;border:1px solid rgba(226,196,122,.7);background:transparent;color:#fff;font-size:18px;cursor:pointer}.tr-palco{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 18px;text-align:center;transition:opacity .6s}.tr-palco.sai{opacity:0}.tr-img{max-height:44vh;max-width:min(92vw,620px);border-radius:14px;border:3px solid #C9A24A;box-shadow:0 14px 34px rgba(0,0,0,.5);background:#fff;object-fit:contain}.tr-img.sem{border:0;box-shadow:none;background:none;max-height:30vh}.tr-img.cena{max-height:30vh}.tr-faixa{width:100%;max-width:900px;overflow:hidden;margin-top:10px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}.tr-trilho{display:flex;width:max-content;animation:trRola 38s linear infinite}.tr-trilho img{height:15vh;max-height:150px;display:block;margin-right:7px;border-radius:6px}@keyframes trRola{to{transform:translateX(-50%)}}@media(prefers-reduced-motion:reduce){.tr-trilho{animation:none}}.tr-palco small{margin-top:14px;color:#E2C47A;letter-spacing:.16em;font-weight:700;font-size:12.5px}.tr-palco h2{font-family:Cinzel,Georgia,serif;color:#fff;font-size:clamp(21px,5.4vw,30px);margin:6px 0 8px;line-height:1.25}.tr-palco p{max-width:640px;margin:0 auto;font-size:clamp(16px,4.2vw,18.5px);line-height:1.55;color:#ece6d6}.tr-palco p b{color:#E2C47A}.tr-pe{padding:10px 14px calc(14px + env(safe-area-inset-bottom,0px))}.tr-barra{display:flex;gap:4px;margin-bottom:10px}.tr-barra i{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.2);overflow:hidden}.tr-barra i.ja{background:#C9A24A}.tr-barra i.agora::after{content:"";display:block;height:100%;width:100%;background:#C9A24A;transform-origin:left;animation:trEnche var(--d,11s) linear forwards}.tr.parado .tr-barra i.agora::after{animation-play-state:paused}@keyframes trEnche{from{transform:scaleX(0)}to{transform:scaleX(1)}}.tr-ct{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}.tr-ct button{min-height:44px;min-width:48px;border-radius:24px;border:1px solid rgba(226,196,122,.8);background:transparent;color:#fff;font:600 15px Georgia,serif;padding:0 16px;cursor:pointer}.tr-ct button.forte{background:#C9A24A;color:#0F1B3D;border-color:#C9A24A}';
+  document.head.appendChild(css);
+  var LICOES = [
+    { t: "A fé que obedece", v: "Ora, sem fé é impossível agradar-lhe, porque é necessário que aquele que se aproxima de Deus creia que ele existe e que é galardoador dos que o buscam.", r: "Hebreus 11.6", e: "<b>Abraão</b> saiu da sua terra “sem saber para onde ia” (Hebreus 11.8), confiando apenas na palavra de Deus.", l: "A fé verdadeira obedece antes de entender tudo. Deus revela o caminho a quem dá o primeiro passo." },
+    { t: "Oração que não para", v: "Orai sem cessar.", r: "1 Tessalonicenses 5.17", e: "<b>Daniel</b>, mesmo sabendo do decreto do rei, entrou em casa e orou três vezes por dia, como costumava fazer (Daniel 6.10).", l: "Quem ora todos os dias não é pego de surpresa pela prova: a força nasce no hábito com Deus." },
+    { t: "O perdão que liberta", v: "Antes, sede uns para com os outros benignos, misericordiosos, perdoando-vos uns aos outros, como também Deus vos perdoou em Cristo.", r: "Efésios 4.32", e: "<b>José</b>, vendido pelos irmãos, disse-lhes: “Vós bem intentastes mal contra mim, porém Deus o tornou em bem” (Gênesis 50.20).", l: "O perdão não apaga a dor, mas tira dela o poder de nos prender. Deus transforma feridas em propósito." },
+    { t: "A batalha é do Senhor", v: "Eu vou a ti em nome do SENHOR dos Exércitos.", r: "1 Samuel 17.45", e: "<b>Davi</b>, ainda jovem, enfrentou Golias sem armadura, confiando no nome do Senhor.", l: "O tamanho do problema não decide a vitória. Quem decide é o Deus em cujo nome nós caminhamos." },
+    { t: "Fiel no pouco", v: "Quem é fiel no mínimo também é fiel no muito.", r: "Lucas 16.10", e: "<b>Rute</b> permaneceu ao lado de Noemi e disse: “o teu povo é o meu povo, o teu Deus é o meu Deus” (Rute 1.16). Deus a colocou na linhagem do Messias.", l: "A fidelidade nas coisas simples prepara o caminho para as grandes obras de Deus." },
+    { t: "Há volta para quem cai", v: "Se confessarmos os nossos pecados, ele é fiel e justo para nos perdoar os pecados e nos purificar de toda injustiça.", r: "1 João 1.9", e: "<b>Pedro</b> negou o Senhor e chorou amargamente (Lucas 22.62); depois, Jesus o restaurou e lhe disse: “Apascenta as minhas ovelhas” (João 21.17).", l: "A queda não precisa ser o fim. Arrependimento sincero abre a porta da restauração." },
+    { t: "Amor pela Palavra", v: "Lâmpada para os meus pés é tua palavra e luz, para o meu caminho.", r: "Salmos 119.105", e: "Os <b>bereanos</b> receberam a palavra de bom grado e examinavam cada dia nas Escrituras se as coisas eram assim (Atos 17.11).", l: "Estudar a Bíblia com seriedade não esfria a fé: ilumina o caminho e firma os pés." },
+    { t: "Esperança que não morre", v: "Porque eu sei que o meu Redentor vive, e que por fim se levantará sobre a terra.", r: "Jó 19.25", e: "<b>Jó</b> perdeu bens, filhos e saúde, mas não perdeu a certeza do seu Redentor.", l: "Quando tudo ao redor cai, a esperança em Cristo permanece de pé." }
+  ];
+  window.etuLicoesMonta = function(v) {
+    if (document.getElementById("etuLicoes")) return;
+    var ap = document.getElementById("etuAparencia");
+    var d = document.createElement("section");
+    d.id = "etuLicoes";
+    d.className = "lp";
+    d.setAttribute("aria-label", "Lições da Palavra");
+    d.innerHTML = '<small>UMA PALAVRA PARA A SUA VIDA</small><div class="lp-corpo"></div><div class="lp-ct"><div class="lp-dots">' + LICOES.map(function() {
+      return "<i></i>";
+    }).join("") + '</div><div><button type="button" data-lp="-1" aria-label="Anterior">◀</button><button type="button" data-lp="p" aria-label="Pausar">❚❚</button><button type="button" data-lp="1" aria-label="Próxima">▶</button></div></div>';
+    if (ap && ap.nextSibling) v.insertBefore(d, ap.nextSibling);
+    else v.appendChild(d);
+    var i = Math.floor(Date.now() / 864e5) % LICOES.length, tm = null, pausa = false, corpo = d.querySelector(".lp-corpo");
+    function mostra(n) {
+      i = (n + LICOES.length) % LICOES.length;
+      var L = LICOES[i];
+      corpo.classList.add("sai");
+      setTimeout(function() {
+        corpo.innerHTML = "<h3>" + L.t + "</h3><blockquote>“" + L.v + "”<cite>" + L.r.toUpperCase() + "</cite></blockquote><p>" + L.e + "</p><p><b>Para a nossa vida:</b> " + L.l + "</p>";
+        corpo.classList.remove("sai");
+        d.querySelectorAll(".lp-dots i").forEach(function(x, k) {
+          x.className = k === i ? "on" : "";
+        });
+      }, corpo.innerHTML ? 350 : 0);
+      agenda();
+    }
+    function agenda() {
+      clearTimeout(tm);
+      if (pausa || !document.body.contains(d)) return;
+      tm = setTimeout(function() {
+        if (!document.hidden) mostra(i + 1);
+        else agenda();
+      }, 12e3);
+    }
+    d.querySelectorAll("[data-lp]").forEach(function(b) {
+      b.onclick = function() {
+        var a = b.dataset.lp;
+        if (a === "p") {
+          pausa = !pausa;
+          b.textContent = pausa ? "▶ Continuar" : "❚❚";
+          b.setAttribute("aria-label", pausa ? "Continuar" : "Pausar");
+          agenda();
+        } else mostra(i + +a);
+      };
+    });
+    mostra(i);
+  };
+  function musica() {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    var ctx = new AC(), mestre = ctx.createGain();
+    mestre.gain.value = 0;
+    mestre.connect(ctx.destination);
+    var filtro = ctx.createBiquadFilter();
+    filtro.type = "lowpass";
+    filtro.frequency.value = 1300;
+    filtro.connect(mestre);
+    var AC4 = [[130.81, 196, 261.63, 329.63], [110, 164.81, 220, 261.63], [87.31, 174.61, 220, 261.63], [98, 146.83, 196, 246.94]];
+    var SIN = [523.25, 587.33, 659.25, 783.99, 659.25, 587.33], passo = 0, vivo = true, prox = ctx.currentTime + 0.1;
+    mestre.gain.linearRampToValueAtTime(0.8, ctx.currentTime + 3);
+    function nota(f, t, dur, tipo, vol) {
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = tipo;
+      o.frequency.value = f;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol, t + 1.8);
+      g.gain.setValueAtTime(vol, t + dur - 2);
+      g.gain.linearRampToValueAtTime(0, t + dur);
+      o.connect(g);
+      g.connect(filtro);
+      o.start(t);
+      o.stop(t + dur + 0.1);
+    }
+    function sino(f, t) {
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = f;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.03, t + 0.05);
+      g.gain.exponentialRampToValueAtTime(1e-4, t + 2.8);
+      o.connect(g);
+      g.connect(filtro);
+      o.start(t);
+      o.stop(t + 2.9);
+    }
+    function ciclo() {
+      if (!vivo) return;
+      while (prox < ctx.currentTime + 6) {
+        var a = AC4[passo % 4];
+        a.forEach(function(f, k) {
+          nota(f, prox, 6.5, k ? "sine" : "triangle", k ? 0.028 : 0.04);
+        });
+        if (passo % 2 === 0) sino(SIN[passo / 2 % SIN.length], prox + 2.4);
+        passo++;
+        prox += 5.2;
+      }
+      setTimeout(ciclo, 1500);
+    }
+    ciclo();
+    return { parar: function() {
+      vivo = false;
+      try {
+        mestre.gain.cancelScheduledValues(ctx.currentTime);
+        mestre.gain.setValueAtTime(mestre.gain.value, ctx.currentTime);
+        mestre.gain.linearRampToValueAtTime(0, ctx.currentTime + 1);
+        setTimeout(function() {
+          ctx.close();
+        }, 1200);
+      } catch (e) {
+      }
+    } };
+  }
+  var SL = [
+    { i: "brasao-redondo.webp", s: "BEM-VINDO", h: "Escola Teológica União", p: "Formação Bíblica, Teológica e Ministerial. Uma escola de <b>curso livre de teologia</b>, com sede em Cristalina, Goiás, para quem deseja conhecer a Palavra de Deus com profundidade e servir melhor no Reino.", sem: 1 },
+    { i: "selo-fita.webp", s: "A DIREÇÃO", h: "Quem conduz a escola", p: "A escola é dirigida pelo <b>Pr. Charlei de Jesus Lima Dias</b>, idealizador e Diretor Geral, que prepara e acompanha o conteúdo de cada curso. A linha da escola é <b>pentecostal clássica, trinitária</b> e fiel às Escrituras.", sem: 1 },
+    { i: "dispositivos.webp", s: "CURSO LIVRE DE TEOLOGIA", h: "O que é um curso livre", p: "É uma formação bíblica, teológica e ministerial aberta a todos, amparada pela liberdade de ensino da Constituição Federal e pela Lei 9.394/1996. Prepara para estudar, ensinar na igreja, na Escola Dominical e pregar a Palavra." },
+    { i: "doc-cert-basico.webp", s: "CURSO LIVRE × CURSO DO MEC", h: "Entenda a diferença", p: "O curso livre <b>não é graduação</b> e não depende do MEC: forma para a vida cristã e o ministério, com certificado verificável. A graduação reconhecida pelo MEC dá <b>diploma de nível superior</b>. Quem precisa desse diploma para concurso ou docência deve procurar uma graduação." },
+    { i: "guia-04.webp", s: "OS CURSOS", h: "Do Básico ao Avançado", p: "<b>Básico</b>: as grandes doutrinas da Bíblia. <b>Médio</b>: interpretar, ensinar e pregar. <b>Avançado</b>: aprofundamento para o ministério. Há também especializações, livros e estudos." },
+    { i: "cena-basico.webp", f: "faixa-basico.webp", s: "CURSO BÁSICO DE TEOLOGIA", h: "11 disciplinas, 11 apostilas", p: "Da Introdução à Teologia à Escatologia: Bibliologia, Cristologia, Pneumatologia, Soteriologia e muito mais. Cada disciplina tem a sua apostila, com o significado do nome, o que se estuda e perguntas para refletir.", sem: 1, d: 15e3 },
+    { i: "cena-medio.webp", f: "faixa-medio.webp", s: "CURSO MÉDIO DE TEOLOGIA", h: "10 disciplinas para ensinar e pregar", p: "Hermenêutica, Panoramas do Antigo e do Novo Testamento, Geografia Bíblica, História de Israel e da Igreja, Homilética, Ética Cristã, Evangelismo e Missões e Educação Cristã.", sem: 1, d: 15e3 },
+    { i: "cena-avancado.webp", f: "faixa-avancado.webp", s: "CURSO AVANÇADO DE TEOLOGIA", h: "11 disciplinas para o ministério", p: "Exegese, Teologia Contemporânea, Filosofia e Fé Cristã, Teologia do Antigo e do Novo Testamento, Apologética, Seitas e Heresias, Teologia Pentecostal, Patrística, Teologia Pastoral e Liderança.", sem: 1, d: 15e3 },
+    { i: "guia-01.webp", s: "COMO ACESSAR", h: "escolateologicauniao.github.io", p: "Abra o endereço oficial no <b>Chrome</b> (Android e computador) ou no <b>Safari</b> (iPhone). A plataforma funciona no celular, no tablet, no computador e na TV." },
+    { i: "guia-02.webp", s: "NO SEU CELULAR", h: "Instale o aplicativo", p: "No Chrome, toque nos <b>três pontinhos</b> e em <b>Instalar aplicativo</b>. No iPhone, toque em <b>Compartilhar</b> e em <b>Adicionar à Tela de Início</b>. Sem baixar arquivo e sem pedir acesso a fotos ou contatos." },
+    { i: "guia-06.webp", s: "PRIMEIROS PASSOS", h: "Conta e matrícula", p: "Crie a sua conta com nome, WhatsApp e e-mail. A matrícula é feita pelo Pix <b>somente na chave exibida na plataforma</b>, e o comprovante vai pelo WhatsApp oficial da escola." },
+    { i: "guia-10.webp", s: "ESTUDE NO SEU RITMO", h: "Vídeo e apostila", p: "Cada aula traz vídeo e apostila na mesma tela, com letra maior ou menor e modo noturno. Você estuda quando e onde puder." },
+    { i: "guia-11.webp", s: "PROVAS CORRIGIDAS NA HORA", h: "Aprenda com cada resposta", p: "O erro aparece em <b>vermelho</b>, a resposta certa em <b>verde</b>, e a nota sai na hora. A aprovação é com 70%, e você pode refazer quantas vezes precisar." },
+    { i: "doc-cart-frente.webp", s: "DOCUMENTOS", h: "Certificado e carteirinha", p: "Ao concluir o curso, o aluno recebe <b>certificado com código de verificação</b>. O aluno com matrícula ativa recebe a <b>carteira de estudante</b>, válida por 3 anos. Qualquer pessoa pode validar os documentos na plataforma." },
+    { i: "guia-13.webp", s: "PARA QUEM AMA A PALAVRA", h: "Palavra do dia e Oficina do Sermão", p: "Todo dia, uma palavra da Bíblia explicada no hebraico ou no grego. Na <b>Oficina do Sermão</b>, o mesmo texto organizado em sermão temático, textual e expositivo." },
+    { i: "guia-16.webp", s: "APRENDA BRINCANDO", h: "Desafio Bíblico", p: "Perguntas em quatro níveis e charadas de “Quem sou eu?”, com a explicação bíblica de cada resposta. Encontre em <b>Menu → Desafio Bíblico</b>." },
+    { i: "guia-19.webp", s: "DO SEU JEITO", h: "Cores, brasão e avisos", p: "Em <b>Menu → Aparência do aplicativo</b>, toque em <b>Opções de cores</b> ou <b>Estilo do brasão</b>. No sininho, ative as notificações para receber os avisos da escola." },
+    { i: "guia-18.webp", s: "ESTAMOS COM VOCÊ", h: "Ajuda e segurança", p: "Toque em <b>Ajuda</b> ou no botão do <b>WhatsApp</b> para falar com a escola. A escola <b>nunca pede senha</b>, código por SMS ou Pix fora da chave exibida na plataforma." },
+    { i: "brasao-redondo.webp", s: "2 TIMÓTEO 2.15", h: "Comece hoje a sua formação", p: "“Procura apresentar-te a Deus aprovado, como obreiro que não tem de que se envergonhar, que maneja bem a palavra da verdade.”", sem: 1, fim: 1 }
+  ];
+  var DUR = 11e3;
+  window.etuTour = function() {
+    if (document.getElementById("etuTour")) return;
+    var o = document.createElement("div");
+    o.id = "etuTour";
+    o.className = "tr";
+    o.setAttribute("role", "dialog");
+    o.setAttribute("aria-modal", "true");
+    o.setAttribute("aria-label", "Apresentação da Escola Teológica União");
+    o.innerHTML = '<div class="tr-top"><img src="brasao-redondo.webp" alt=""><b>CONHEÇA A ESCOLA</b><button type="button" data-t="x" aria-label="Fechar a apresentação">✕</button></div><div class="tr-palco" aria-live="polite"></div><div class="tr-pe"><div class="tr-barra">' + SL.map(function() {
+      return "<i></i>";
+    }).join("") + '</div><div class="tr-ct"><button type="button" data-t="a" aria-label="Anterior">◀</button><button type="button" data-t="p" class="forte">❚❚ Pausar</button><button type="button" data-t="n" aria-label="Próximo">▶</button><button type="button" data-t="m">♪ Música</button></div></div>';
+    document.body.appendChild(o);
+    document.documentElement.style.overflow = "hidden";
+    var palco = o.querySelector(".tr-palco"), i = 0, tm = null, pausa = false, som = null;
+    o.style.setProperty("--d", DUR / 1e3 + "s");
+    function bt(t) {
+      return o.querySelector('[data-t="' + t + '"]');
+    }
+    function mus(liga) {
+      if (liga && !som) {
+        som = musica();
+      } else if (!liga && som) {
+        som.parar();
+        som = null;
+      }
+      bt("m").textContent = som ? "♪ Parar música" : "♪ Música";
+      bt("m").setAttribute("aria-pressed", !!som);
+    }
+    function mostra(n) {
+      if (n < 0) n = 0;
+      if (n >= SL.length) {
+        pausa = true;
+        n = SL.length - 1;
+      }
+      i = n;
+      var S2 = SL[i];
+      palco.classList.add("sai");
+      setTimeout(function() {
+        palco.innerHTML = '<img class="tr-img' + (S2.sem ? " sem" : "") + (S2.f ? " cena" : "") + '" src="' + S2.i + '" alt="">' + (S2.f ? '<div class="tr-faixa" aria-hidden="true"><div class="tr-trilho"><img src="' + S2.f + '" alt=""><img src="' + S2.f + '" alt=""></div></div>' : "") + "<small>" + S2.s + "</small><h2>" + S2.h + "</h2><p>" + S2.p + "</p>" + (S2.fim ? '<div class="tr-ct" style="margin-top:16px"><a class="btn btn-gold" href="#cursos" data-t="ir">Conhecer os cursos</a><a class="btn btn-line" href="#como-usar" data-t="ir" style="color:#fff">Guia passo a passo</a></div>' : "");
+        palco.classList.remove("sai");
+        o.style.setProperty("--d", (S2.d || DUR) / 1e3 + "s");
+        o.querySelectorAll(".tr-barra i").forEach(function(x, k) {
+          x.className = k < i ? "ja" : k === i ? "agora" : "";
+        });
+        if (S2.fim) {
+          pausa = true;
+          o.classList.add("parado");
+          bt("p").textContent = "↺ Recomeçar";
+        }
+        palco.querySelectorAll('[data-t="ir"]').forEach(function(a) {
+          a.addEventListener("click", fecha);
+        });
+      }, palco.innerHTML ? 450 : 0);
+      agenda();
+    }
+    function agenda() {
+      clearTimeout(tm);
+      if (pausa) return;
+      tm = setTimeout(function() {
+        mostra(i + 1);
+      }, SL[i].d || DUR);
+    }
+    function fecha() {
+      clearTimeout(tm);
+      mus(false);
+      o.remove();
+      document.documentElement.style.overflow = "";
+      document.removeEventListener("keydown", tecla);
+      document.removeEventListener("visibilitychange", vis);
+    }
+    function tecla(e) {
+      if (e.key === "Escape") fecha();
+      else if (e.key === "ArrowRight") mostra(i + 1);
+      else if (e.key === "ArrowLeft") mostra(i - 1);
+    }
+    function vis() {
+      if (document.hidden) {
+        mus(false);
+      }
+    }
+    bt("x").onclick = fecha;
+    bt("a").onclick = function() {
+      mostra(i - 1);
+    };
+    bt("n").onclick = function() {
+      mostra(i + 1);
+    };
+    bt("m").onclick = function() {
+      mus(!som);
+    };
+    bt("p").onclick = function() {
+      if (SL[i].fim) {
+        pausa = false;
+        o.classList.remove("parado");
+        bt("p").textContent = "❚❚ Pausar";
+        mostra(0);
+        return;
+      }
+      pausa = !pausa;
+      o.classList.toggle("parado", pausa);
+      bt("p").textContent = pausa ? "▶ Continuar" : "❚❚ Pausar";
+      if (!pausa) {
+        mostra(i + 1);
+      } else clearTimeout(tm);
+    };
+    document.addEventListener("keydown", tecla);
+    document.addEventListener("visibilitychange", vis);
+    mus(true);
+    mostra(0);
+    bt("x").focus({ preventScroll: true });
+  };
+  function cartao(id) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "tc";
+    b.id = id;
+    b.innerHTML = '<i class="tc-play" aria-hidden="true">▶</i><div><small>APRESENTAÇÃO DA ESCOLA</small><b>Conheça a Escola Teológica União</b><span>Tudo sobre a escola, os cursos e a plataforma, com música suave. Cerca de 3 minutos.</span></div>';
+    b.onclick = window.etuTour;
+    return b;
+  }
+  function monta() {
+    var mv = document.querySelector('[data-view="mais"] .wrap'), nav = mv && mv.querySelector("nav.mais");
+    if (mv && !document.getElementById("tcMenu")) {
+      var c = cartao("tcMenu");
+      c.style.marginBottom = "16px";
+      mv.insertBefore(c, mv.firstChild);
+    }
+    var pal = document.getElementById("etuPalavra");
+    if (pal && !document.getElementById("tcInicio")) {
+      var w = document.createElement("div");
+      w.className = "wrap";
+      w.style.cssText = "max-width:820px;padding:18px 18px 0";
+      w.appendChild(cartao("tcInicio"));
+      pal.parentNode.insertBefore(w, pal);
+    }
+    var gp = document.querySelector('[data-view="como-usar"] .gp-moldura');
+    if (gp && !document.getElementById("tcGuia")) {
+      var g = cartao("tcGuia");
+      g.style.marginTop = "16px";
+      gp.appendChild(g);
+    }
+    if (location.hash === "#mais" && !document.getElementById("etuLicoes")) {
+      var v = document.querySelector('[data-view="mais"] .wrap');
+      if (v && document.getElementById("etuAparencia")) window.etuLicoesMonta(v);
+    }
+  }
+  addEventListener("load", function() {
+    setTimeout(monta, 900);
+    setTimeout(monta, 2500);
+  });
+  addEventListener("hashchange", function() {
+    setTimeout(monta, 400);
+  });
 })();
