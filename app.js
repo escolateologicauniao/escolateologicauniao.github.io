@@ -527,7 +527,7 @@ function SupaBackend() {
     },
     async canais() {
       const r = await sb.from("canais_oficiais").select("*").order("id");
-      return r.data && r.data.length ? r.data : CANAIS_PADRAO;
+      return (r.data && r.data.length ? r.data : CANAIS_PADRAO).map((c) => __spreadProps(__spreadValues({}, c), { valor: etuMascaraCNPJ(c.valor) }));
     },
     async salvarCanal(c) {
       err(await sb.from("canais_oficiais").insert(c));
@@ -3156,12 +3156,15 @@ document.addEventListener("click", (e) => {
   };
   t.appendChild(b);
 })();
+function etuMascaraCNPJ(v) {
+  return String(v == null ? "" : v).replace(/\b(\d{2})\.(\d{2})(\d)\.(\d{3})\/(\d{4})-(\d{2})\b/g, "••.••$3.$4/$5-••");
+}
 const CANAIS_PADRAO = [
   { id: "p1", tipo: "WhatsApp e telefone", valor: "(61) 99521-1432", descricao: "Atendimento, matrícula e comprovantes" },
   { id: "p2", tipo: "Chave Pix", valor: "(61) 99521-1432", descricao: "Única chave Pix da escola (telefone)" },
   { id: "p3", tipo: "E-mail", valor: "etu.escolateologicauniao215@gmail.com", descricao: "E-mail oficial da Direção" },
   { id: "p4", tipo: "Site", valor: "escolateologicauniao.github.io", descricao: "Plataforma oficial da escola" },
-  { id: "p5", tipo: "CNPJ", valor: "59.037.548/0001-59", descricao: "Escola Teológica União, Cristalina, Goiás" }
+  { id: "p5", tipo: "CNPJ", valor: "••.••7.548/0001-••", descricao: "Escola Teológica União, Cristalina, Goiás" }
 ];
 function normCanal(v) {
   v = String(v || "").trim().toLowerCase();
@@ -5718,7 +5721,7 @@ window.etuAtivarNotif = async function(m, depois) {
   if (depois) depois();
 };
 (function() {
-  var VERSAO = "Versão 57 · 27/11/2026";
+  var VERSAO = "Versão 59 · 27/11/2026";
   function estadoNotif() {
     if (!("Notification" in window)) return "não disponíveis neste aparelho";
     return Notification.permission === "granted" ? "ativadas ✓" : Notification.permission === "denied" ? "bloqueadas no celular" : "desativadas";
@@ -7597,7 +7600,7 @@ addEventListener("load", () => {
 })();
 window.etuVoz = (function() {
   var ok = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window, vozes = [], ativo = false, botaoAtual = null;
-  var TIMBRES = { natural: { n: "Natural", p: 1, r: 0.95 }, grave: { n: "Grave", p: 0.6, r: 0.88 }, aguda: { n: "Aguda", p: 1.4, r: 1 }, calma: { n: "Calma e pausada", p: 0.9, r: 0.78 }, firme: { n: "Firme", p: 0.8, r: 1.02 } };
+  var TIMBRES = { natural: { n: "Natural", p: 1, r: 0.9 }, grave: { n: "Grave", p: 0.6, r: 0.88 }, aguda: { n: "Aguda", p: 1.4, r: 1 }, calma: { n: "Calma e pausada", p: 0.9, r: 0.78 }, firme: { n: "Firme", p: 0.8, r: 1.02 } };
   function ler(k, d) {
     try {
       return localStorage.getItem(k) || d;
@@ -7611,8 +7614,12 @@ window.etuVoz = (function() {
     vozes = L.filter(function(v) {
       return /^pt/i.test(v.lang);
     }).sort(function(a, b) {
-      return (/BR/i.test(b.lang) ? 1 : 0) - (/BR/i.test(a.lang) ? 1 : 0);
+      return nota(b) - nota(a);
     });
+  }
+  function nota(v) {
+    var n = v.name || "";
+    return (/BR/i.test(v.lang) ? 10 : 0) + (/natural|neural|online|premium|enhanced|aprimorad|wavenet/i.test(n) ? 20 : 0) + (/google/i.test(n) ? 5 : 0) + (v.localService ? 0 : 2);
   }
   if (ok) {
     carrega();
@@ -7652,13 +7659,7 @@ window.etuVoz = (function() {
     }
     speechSynthesis.cancel();
     var t = TIMBRES[ler("etu_voz_timbre", "natural")] || TIMBRES.natural, v = voz();
-    var u = new SpeechSynthesisUtterance(limpa(texto));
-    u.lang = v && v.lang || "pt-BR";
-    if (v) u.voice = v;
-    u.rate = t.r;
-    u.pitch = t.p;
-    u.volume = 1;
-    var feito = false;
+    var partes = limpa(texto).match(/[^.!?;:]+[.!?;:]*/g) || [], k = 0, feito = false, geracao = ++falar.g;
     function acaba() {
       if (feito) return;
       feito = true;
@@ -7666,18 +7667,44 @@ window.etuVoz = (function() {
       if (window.etuVolAplica) window.etuVolAplica();
       fim && fim();
     }
-    u.onend = acaba;
-    u.onerror = acaba;
-    window.etuDuck = 1;
-    if (window.etuVolAplica) window.etuVolAplica();
-    setTimeout(function() {
+    function prox() {
+      if (geracao !== falar.g) {
+        return;
+      }
+      if (k >= partes.length) {
+        acaba();
+        return;
+      }
+      var tx = partes[k++].trim();
+      if (!tx) {
+        prox();
+        return;
+      }
+      var u = new SpeechSynthesisUtterance(tx);
+      u.lang = v && v.lang || "pt-BR";
+      if (v) u.voice = v;
+      u.rate = t.r;
+      u.pitch = t.p;
+      u.volume = 1;
+      var pausa = /[.!?]$/.test(tx) ? 420 : /[;:]$/.test(tx) ? 260 : 120;
+      u.onend = function() {
+        setTimeout(prox, pausa);
+      };
+      u.onerror = function(e) {
+        if (e && e.error === "interrupted") return;
+        acaba();
+      };
       try {
         speechSynthesis.speak(u);
       } catch (e) {
         acaba();
       }
-    }, 60);
+    }
+    window.etuDuck = 1;
+    if (window.etuVolAplica) window.etuVolAplica();
+    setTimeout(prox, 80);
   }
+  falar.g = 0;
   return {
     disponivel: ok,
     TIMBRES,
@@ -7693,11 +7720,15 @@ window.etuVoz = (function() {
     },
     liga: function(v) {
       ativo = !!v;
-      if (!ativo && ok) speechSynthesis.cancel();
+      if (!ativo) {
+        falar.g++;
+        if (ok) speechSynthesis.cancel();
+      }
       window.etuDuck = 0;
       if (window.etuVolAplica) window.etuVolAplica();
     },
     para: function() {
+      falar.g++;
       if (ok) speechSynthesis.cancel();
       marcaBotao(botaoAtual, false);
       botaoAtual = null;
