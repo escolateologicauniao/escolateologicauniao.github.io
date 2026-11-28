@@ -5718,7 +5718,7 @@ window.etuAtivarNotif = async function(m, depois) {
   if (depois) depois();
 };
 (function() {
-  var VERSAO = "Versão 56 · 27/11/2026";
+  var VERSAO = "Versão 58 · 27/11/2026";
   function estadoNotif() {
     if (!("Notification" in window)) return "não disponíveis neste aparelho";
     return Notification.permission === "granted" ? "ativadas ✓" : Notification.permission === "denied" ? "bloqueadas no celular" : "desativadas";
@@ -7596,24 +7596,44 @@ addEventListener("load", () => {
   else inicia();
 })();
 window.etuVoz = (function() {
-  var ok = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window, voz = null, ativo = false;
-  function escolhe() {
+  var ok = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window, vozes = [], ativo = false, botaoAtual = null;
+  var TIMBRES = { natural: { n: "Natural", p: 1, r: 0.9 }, grave: { n: "Grave", p: 0.6, r: 0.88 }, aguda: { n: "Aguda", p: 1.4, r: 1 }, calma: { n: "Calma e pausada", p: 0.9, r: 0.78 }, firme: { n: "Firme", p: 0.8, r: 1.02 } };
+  function ler(k, d) {
+    try {
+      return localStorage.getItem(k) || d;
+    } catch (e) {
+      return d;
+    }
+  }
+  function carrega() {
     if (!ok) return;
     var L = speechSynthesis.getVoices() || [];
-    voz = L.find(function(v) {
-      return /pt[-_]BR/i.test(v.lang) && /google|natural|luciana|francisca|thalita/i.test(v.name);
-    }) || L.find(function(v) {
-      return /pt[-_]BR/i.test(v.lang);
-    }) || L.find(function(v) {
+    vozes = L.filter(function(v) {
       return /^pt/i.test(v.lang);
-    }) || null;
+    }).sort(function(a, b) {
+      return nota(b) - nota(a);
+    });
+  }
+  function nota(v) {
+    var n = v.name || "";
+    return (/BR/i.test(v.lang) ? 10 : 0) + (/natural|neural|online|premium|enhanced|aprimorad|wavenet/i.test(n) ? 20 : 0) + (/google/i.test(n) ? 5 : 0) + (v.localService ? 0 : 2);
   }
   if (ok) {
-    escolhe();
+    carrega();
     try {
-      speechSynthesis.onvoiceschanged = escolhe;
+      speechSynthesis.addEventListener("voiceschanged", carrega);
     } catch (e) {
+      try {
+        speechSynthesis.onvoiceschanged = carrega;
+      } catch (_) {
+      }
     }
+  }
+  function voz() {
+    var u = ler("etu_voz_nome", "");
+    return vozes.find(function(v) {
+      return v.voiceURI === u || v.name === u;
+    }) || vozes[0] || null;
   }
   function limpa(t) {
     var d = document.createElement("div");
@@ -7624,56 +7644,125 @@ window.etuVoz = (function() {
     t = t.replace(/[“”"]/g, "").replace(/\s*•\s*/g, ". ").replace(/×/g, " e ").replace(/\s+/g, " ").trim();
     return t;
   }
+  function marcaBotao(b, on) {
+    if (!b) return;
+    b.setAttribute("aria-pressed", on);
+    if (b.dataset.rot) b.textContent = on ? "⏹ Parar" : b.dataset.rot;
+  }
+  function falar(texto, fim) {
+    if (!ok) {
+      fim && fim();
+      return;
+    }
+    speechSynthesis.cancel();
+    var t = TIMBRES[ler("etu_voz_timbre", "natural")] || TIMBRES.natural, v = voz();
+    var partes = limpa(texto).match(/[^.!?;:]+[.!?;:]*/g) || [], k = 0, feito = false, geracao = ++falar.g;
+    function acaba() {
+      if (feito) return;
+      feito = true;
+      window.etuDuck = 0;
+      if (window.etuVolAplica) window.etuVolAplica();
+      fim && fim();
+    }
+    function prox() {
+      if (geracao !== falar.g) {
+        return;
+      }
+      if (k >= partes.length) {
+        acaba();
+        return;
+      }
+      var tx = partes[k++].trim();
+      if (!tx) {
+        prox();
+        return;
+      }
+      var u = new SpeechSynthesisUtterance(tx);
+      u.lang = v && v.lang || "pt-BR";
+      if (v) u.voice = v;
+      u.rate = t.r;
+      u.pitch = t.p;
+      u.volume = 1;
+      var pausa = /[.!?]$/.test(tx) ? 420 : /[;:]$/.test(tx) ? 260 : 120;
+      u.onend = function() {
+        setTimeout(prox, pausa);
+      };
+      u.onerror = function(e) {
+        if (e && e.error === "interrupted") return;
+        acaba();
+      };
+      try {
+        speechSynthesis.speak(u);
+      } catch (e) {
+        acaba();
+      }
+    }
+    window.etuDuck = 1;
+    if (window.etuVolAplica) window.etuVolAplica();
+    setTimeout(prox, 80);
+  }
+  falar.g = 0;
   return {
     disponivel: ok,
+    TIMBRES,
+    vozes: function() {
+      carrega();
+      return vozes.slice();
+    },
+    modo: function() {
+      return ler("etu_som_modo", "musica");
+    },
     ligado: function() {
       return ativo;
     },
     liga: function(v) {
       ativo = !!v;
-      if (!ativo && ok) speechSynthesis.cancel();
+      if (!ativo) {
+        falar.g++;
+        if (ok) speechSynthesis.cancel();
+      }
       window.etuDuck = 0;
       if (window.etuVolAplica) window.etuVolAplica();
     },
     para: function() {
+      falar.g++;
       if (ok) speechSynthesis.cancel();
+      marcaBotao(botaoAtual, false);
+      botaoAtual = null;
       window.etuDuck = 0;
       if (window.etuVolAplica) window.etuVolAplica();
     },
     fala: function(texto, fim) {
-      if (!ok || !ativo) {
+      if (!ativo) {
         fim && fim();
         return;
       }
-      speechSynthesis.cancel();
-      var u = new SpeechSynthesisUtterance(limpa(texto));
-      u.lang = "pt-BR";
-      if (voz) u.voice = voz;
-      u.rate = 0.95;
-      u.pitch = 1;
-      u.volume = 1;
-      var feito = false;
-      function acaba() {
-        if (feito) return;
-        feito = true;
-        window.etuDuck = 0;
-        if (window.etuVolAplica) window.etuVolAplica();
-        fim && fim();
+      falar(texto, fim);
+    },
+    ouvir: function(texto, b) {
+      if (botaoAtual && botaoAtual === b) {
+        this.para();
+        return;
       }
-      u.onend = acaba;
-      u.onerror = acaba;
-      window.etuDuck = 1;
-      if (window.etuVolAplica) window.etuVolAplica();
-      setTimeout(function() {
-        try {
-          speechSynthesis.speak(u);
-        } catch (e) {
-          acaba();
-        }
-      }, 60);
+      this.para();
+      botaoAtual = b;
+      marcaBotao(b, true);
+      falar(texto, function() {
+        marcaBotao(b, false);
+        if (botaoAtual === b) botaoAtual = null;
+      });
+    },
+    teste: function() {
+      falar("A paz do Senhor! Esta é a voz da Escola Teológica União. Procura apresentar-te a Deus aprovado, como obreiro que não tem de que se envergonhar.");
     }
   };
 })();
+document.addEventListener("click", function(e) {
+  var b = e.target.closest && e.target.closest("[data-fala]");
+  if (!b || !window.etuVoz) return;
+  e.preventDefault();
+  window.etuVoz.ouvir(b.dataset.fala, b);
+});
 (function() {
   const DISC = [{ "c": "BÁSICO", "n": 1, "t": "Introdução à Teologia", "s": "A palavra “teologia” vem do grego: Deus + palavra, estudo. É o estudo organizado do que Deus revelou sobre Si mesmo.", "q": "Todo cristão faz teologia, mesmo sem perceber?", "v": "Conheçamos e prossigamos em conhecer ao SENHOR.", "r": "Oseias 6.3", "k": "#C9A24A", "b": "#1B2A52" }, { "c": "BÁSICO", "n": 2, "t": "Bibliologia", "s": "Do grego: livro + estudo. É a doutrina das Sagradas Escrituras.", "q": "Como a Bíblia chegou até as nossas mãos?", "v": "Toda Escritura divinamente inspirada é proveitosa para ensinar, para redarguir, para corrigir, para instruir em justiça.", "r": "2 Timóteo 3.16", "k": "#D9A85B", "b": "#3B2A1A" }, { "c": "BÁSICO", "n": 3, "t": "Teologia Propriamente Dita", "s": "É a doutrina de Deus: o estudo de quem Deus é, como Ele se revela e como age.", "q": "Deus existe? Como responder a quem duvida?", "v": "É necessário que aquele que se aproxima de Deus creia que ele existe e que é galardoador dos que o buscam.", "r": "Hebreus 11.6", "k": "#5FC2B4", "b": "#0F3B3A" }, { "c": "BÁSICO", "n": 4, "t": "Cristologia", "s": "Do grego Christós, “Ungido”, + estudo. É a doutrina da pessoa e da obra de Jesus Cristo.", "q": "Jesus é Deus ou apenas um grande profeta?", "v": "No princípio, era o Verbo, e o Verbo estava com Deus, e o Verbo era Deus.", "r": "João 1.1", "k": "#E3B04B", "b": "#5A1220" }, { "c": "BÁSICO", "n": 5, "t": "Pneumatologia", "s": "Do grego pneuma: “espírito, sopro, vento”. É a doutrina do Espírito Santo.", "q": "O Espírito Santo é uma Pessoa ou uma força?", "v": "E todos foram cheios do Espírito Santo e começaram a falar em outras línguas, conforme o Espírito Santo lhes concedia que falassem.", "r": "Atos 2.4", "k": "#F2B84B", "b": "#7A2E0E" }, { "c": "BÁSICO", "n": 6, "t": "Angelologia", "s": "Do grego ángelos: “mensageiro”. É o estudo dos anjos, de Satanás e dos demônios.", "q": "Os anjos existem e o que eles fazem?", "v": "O anjo do SENHOR acampa-se ao redor dos que o temem, e os livra.", "r": "Salmos 34.7", "k": "#A9B8E0", "b": "#24304F" }, { "c": "BÁSICO", "n": 7, "t": "Antropologia Bíblica", "s": "Do grego ánthropos: “ser humano”. É o estudo do homem à luz da Bíblia.", "q": "O que significa ser criado à imagem de Deus?", "v": "E criou Deus o homem à sua imagem; à imagem de Deus o criou; macho e fêmea os criou.", "r": "Gênesis 1.27", "k": "#B7CF6A", "b": "#2F4A1E" }, { "c": "BÁSICO", "n": 8, "t": "Hamartiologia", "s": "Do grego hamartía: “pecado”, no sentido de “errar o alvo”. É a doutrina do pecado.", "q": "O que é pecado, de fato?", "v": "Porque o salário do pecado é a morte, mas o dom gratuito de Deus é a vida eterna, por Cristo Jesus, nosso Senhor.", "r": "Romanos 6.23", "k": "#D45B5B", "b": "#3A0F14" }, { "c": "BÁSICO", "n": 9, "t": "Soteriologia", "s": "Do grego sotería: “salvação, livramento”. É a doutrina da salvação.", "q": "Como alguém é salvo?", "v": "Porque pela graça sois salvos, por meio da fé; e isso não vem de vós; é dom de Deus.", "r": "Efésios 2.8", "k": "#6FB3E0", "b": "#123B5C" }, { "c": "BÁSICO", "n": 10, "t": "Eclesiologia", "s": "Do grego ekklesía: “assembleia, os chamados para fora”. É a doutrina da Igreja.", "q": "A Igreja é o prédio ou o povo?", "v": "Sobre esta pedra edificarei a minha igreja, e as portas do inferno não prevalecerão contra ela.", "r": "Mateus 16.18", "k": "#C9A0E0", "b": "#4A2A5C" }, { "c": "BÁSICO", "n": 11, "t": "Escatologia", "s": "Do grego éschatos: “último”. É a doutrina das últimas coisas.", "q": "O que é o arrebatamento da Igreja?", "v": "Seremos arrebatados juntamente com eles nas nuvens, a encontrar o Senhor nos ares, e assim estaremos sempre com o Senhor.", "r": "1 Tessalonicenses 4.17", "k": "#E8C46A", "b": "#1E1E3C" }, { "c": "MÉDIO", "n": 1, "t": "Hermenêutica Bíblica", "s": "Do grego hermeneúo: “interpretar, explicar”. É a ciência de interpretar a Bíblia corretamente.", "q": "Como interpretar a Bíblia sem torcer o texto?", "v": "E, começando por Moisés e por todos os profetas, explicava-lhes o que dele se achava em todas as Escrituras.", "r": "Lucas 24.27", "k": "#4FC0D9", "b": "#0E3A4A" }, { "c": "MÉDIO", "n": 2, "t": "Panorama do Antigo Testamento", "s": "Uma visão de conjunto dos 39 livros do Antigo Testamento.", "q": "Como os livros do Antigo Testamento estão organizados?", "v": "Convinha que se cumprisse tudo o que de mim estava escrito na Lei de Moisés, e nos Profetas, e nos Salmos.", "r": "Lucas 24.44", "k": "#E0B060", "b": "#4A3210" }, { "c": "MÉDIO", "n": 3, "t": "Panorama do Novo Testamento", "s": "Uma visão de conjunto dos 27 livros do Novo Testamento.", "q": "Por que temos quatro Evangelhos?", "v": "Estes, porém, foram escritos para que creiais que Jesus é o Cristo, o Filho de Deus, e para que, crendo, tenhais vida em seu nome.", "r": "João 20.31", "k": "#D59BE6", "b": "#3C1A44" }, { "c": "MÉDIO", "n": 4, "t": "Geografia Bíblica", "s": "O estudo das terras, cidades, rios e caminhos onde a história bíblica aconteceu.", "q": "Onde ficam Jerusalém, o Jordão e o Mar da Galileia?", "v": "Assim como estão os montes à roda de Jerusalém, assim o SENHOR está em volta do seu povo, desde agora e para sempre.", "r": "Salmos 125.2", "k": "#7FD1A0", "b": "#1F4A33" }, { "c": "MÉDIO", "n": 5, "t": "História de Israel", "s": "A trajetória do povo de Israel, de Abraão ao retorno do exílio.", "q": "Por que Deus escolheu Abraão?", "v": "Porque tudo que dantes foi escrito para nosso ensino foi escrito, para que, pela paciência e consolação das Escrituras, tenhamos esperança.", "r": "Romanos 15.4", "k": "#F0A060", "b": "#5A2A10" }, { "c": "MÉDIO", "n": 6, "t": "História da Igreja", "s": "A caminhada da Igreja de Cristo da era apostólica até os dias de hoje.", "q": "Como a Igreja sobreviveu às perseguições?", "v": "Jesus Cristo é o mesmo ontem, e hoje, e eternamente.", "r": "Hebreus 13.8", "k": "#D0B070", "b": "#2A2A2A" }, { "c": "MÉDIO", "n": 7, "t": "Homilética", "s": "Do grego homilía: “conversa, discurso”. É a arte de preparar e pregar sermões.", "q": "Como transformar um texto bíblico em sermão?", "v": "Que pregues a palavra, instes a tempo e fora de tempo, redarguas, repreendas, exortes, com toda a longanimidade e doutrina.", "r": "2 Timóteo 4.2", "k": "#F08AA8", "b": "#5C0F2E" }, { "c": "MÉDIO", "n": 8, "t": "Ética Cristã", "s": "Do grego éthos: “costume, caráter”. É o estudo da conduta cristã à luz da Bíblia.", "q": "Como decidir o que é certo quando a Bíblia não cita o assunto?", "v": "Ele te declarou, ó homem, o que é bom; e que é o que o SENHOR pede de ti, senão que pratiques a justiça, e ames a beneficência, e andes humildemente com o teu Deus?", "r": "Miqueias 6.8", "k": "#90B8D8", "b": "#203A50" }, { "c": "MÉDIO", "n": 9, "t": "Evangelismo e Missões", "s": "“Evangelho” vem do grego: “boa notícia”. Missão é o envio da Igreja ao mundo.", "q": "Todo crente é chamado a evangelizar?", "v": "Portanto, ide, ensinai todas as nações, batizando-as em nome do Pai, e do Filho, e do Espírito Santo.", "r": "Mateus 28.19", "k": "#6FE0A0", "b": "#0F4A2A" }, { "c": "MÉDIO", "n": 10, "t": "Educação Cristã", "s": "O ensino da Palavra de Deus na igreja e na família.", "q": "Como ensinar a Bíblia de forma clara e marcante?", "v": "E estas palavras que hoje te ordeno estarão no teu coração; e as intimarás a teus filhos.", "r": "Deuteronômio 6.6-7", "k": "#F0D060", "b": "#4A3A0F" }, { "c": "AVANÇADO", "n": 1, "t": "Exegese Bíblica", "s": "A palavra vem do grego e significa “explicação”: conduzir para fora do texto o sentido que o autor bíblico colocou nele.", "q": "Qual a diferença entre tirar do texto e colocar no texto?", "v": "E leram no livro, na Lei de Deus, e declarando e explicando o sentido, faziam que, lendo, se entendesse.", "r": "Neemias 8.8", "k": "#E8C46A", "b": "#0B2F4F" }, { "c": "AVANÇADO", "n": 2, "t": "Teologia Contemporânea", "s": "O estudo das correntes teológicas dos séculos 19, 20 e 21 e de como elas influenciam a Igreja hoje.", "q": "Por que surgem tantas teologias novas?", "v": "Tive por necessidade escrever-vos e exortar-vos a batalhar pela fé que uma vez foi dada aos santos.", "r": "Judas 3", "k": "#9FC0E8", "b": "#33333F" }, { "c": "AVANÇADO", "n": 3, "t": "Filosofia e Fé Cristã", "s": "Filosofia, no grego, significa “amor à sabedoria”. Aqui as grandes perguntas da vida são examinadas à luz da revelação de Deus.", "q": "Fé e razão são inimigas?", "v": "Tende cuidado para que ninguém vos faça presa sua, por meio de filosofias e vãs sutilezas, segundo a tradição dos homens, segundo os rudimentos do mundo e não segundo Cristo.", "r": "Colossenses 2.8", "k": "#E0D08A", "b": "#2E2A12" }, { "c": "AVANÇADO", "n": 4, "t": "Teologia do Antigo Testamento", "s": "O estudo dos grandes temas revelados no Antigo Testamento e de como eles caminham até Cristo.", "q": "O Deus do Antigo Testamento é o mesmo do Novo?", "v": "E porei inimizade entre ti e a mulher e entre a tua semente e a sua semente; esta te ferirá a cabeça, e tu lhe ferirás o calcanhar.", "r": "Gênesis 3.15", "k": "#E8A070", "b": "#4A2416" }, { "c": "AVANÇADO", "n": 5, "t": "Teologia do Novo Testamento", "s": "O estudo dos grandes temas do Novo Testamento: as promessas de Deus cumpridas em Cristo.", "q": "O que Jesus ensinou sobre o Reino de Deus?", "v": "Mas, vindo a plenitude dos tempos, Deus enviou seu Filho, nascido de mulher, nascido sob a lei.", "r": "Gálatas 4.4", "k": "#8FD0F0", "b": "#10354A" }, { "c": "AVANÇADO", "n": 6, "t": "Apologética Cristã", "s": "A palavra vem do grego e significa “defesa, resposta”. É a defesa bíblica e racional da fé cristã.", "q": "Como mostrar que Jesus ressuscitou?", "v": "Estai sempre preparados para responder com mansidão e temor a qualquer que vos pedir a razão da esperança que há em vós.", "r": "1 Pedro 3.15", "k": "#A8D878", "b": "#1A3A1A" }, { "c": "AVANÇADO", "n": 7, "t": "Seitas e Heresias", "s": "Heresia, no grego, significa “escolha, partido”: um ensino que se separa das verdades centrais da fé.", "q": "O que faz de um grupo uma seita?", "v": "Amados, não creiais em todo espírito, mas provai se os espíritos são de Deus, porque já muitos falsos profetas se têm levantado no mundo.", "r": "1 João 4.1", "k": "#F07A5A", "b": "#3A0A0A" }, { "c": "AVANÇADO", "n": 8, "t": "Teologia Pentecostal", "s": "O estudo bíblico e histórico da fé pentecostal: a promessa do Pai cumprida no derramamento do Espírito Santo.", "q": "O batismo no Espírito é diferente da conversão?", "v": "Porque a promessa vos diz respeito a vós, a vossos filhos e a todos os que estão longe: a tantos quantos Deus, nosso Senhor, chamar.", "r": "Atos 2.39", "k": "#FFB040", "b": "#6A1A0A" }, { "c": "AVANÇADO", "n": 9, "t": "Patrística", "s": "Do latim “pai”: o estudo dos escritos dos chamados Pais da Igreja, os líderes cristãos dos primeiros séculos.", "q": "O que criam os cristãos dos primeiros séculos?", "v": "E o que de mim, entre muitas testemunhas, ouviste, confia-o a homens fiéis, que sejam idôneos para também ensinarem os outros.", "r": "2 Timóteo 2.2", "k": "#D8B888", "b": "#3A2E1E" }, { "c": "AVANÇADO", "n": 10, "t": "Teologia Pastoral", "s": "O estudo do cuidado do rebanho de Deus, segundo o exemplo de Cristo, o Bom Pastor.", "q": "O que Deus espera de um pastor?", "v": "Apascentai o rebanho de Deus que está entre vós, tendo cuidado dele, não por força, mas voluntariamente; nem por torpe ganância, mas de ânimo pronto.", "r": "1 Pedro 5.2", "k": "#88D8B8", "b": "#133A33" }, { "c": "AVANÇADO", "n": 11, "t": "Liderança e Administração Eclesiástica", "s": "O estudo de como conduzir a obra de Deus com ordem, fidelidade e visão.", "q": "O que é liderar segundo Jesus?", "v": "Mas faça-se tudo decentemente e com ordem.", "r": "1 Coríntios 14.40", "k": "#E0B0F0", "b": "#2A1440" }];
   let i = 0, timer = null, pausado = false, audio = null;
@@ -7988,6 +8077,7 @@ function etuOficinaAbrir() {
   <p style="margin:0 0 8px">Esta palavra no ${esc(w.l)} significa <b>${esc(w.s)}</b>.</p>
   <p style="margin:0 0 10px;font-style:italic;border-left:4px solid #C9A24A;padding-left:10px">“${esc(w.v)}” <b style="font-style:normal">(${esc(w.r)})</b></p>
   <p style="margin:0 0 8px"><b>Para hoje:</b> ${esc(w.a)}</p>
+  <button type="button" class="btn btn-line btn-sm" style="margin:0 0 8px" data-rot="🗣 Ouvir a palavra do dia" data-fala="${esc("A palavra do dia: " + w.p + ". Esta palavra no " + w.l + " significa " + w.s + ". " + w.v + " " + w.r + ". Para hoje: " + w.a)}">🗣 Ouvir a palavra do dia</button>
   <p style="margin:0;font-size:14px;color:#666">No original: ${esc(w.o)} • Uma palavra nova a cada dia.</p>
  </article>
  <article style="background:#1B2238;color:#F7F1E3;border:1.5px solid #C9A24A;border-radius:14px;padding:20px 22px;display:flex;flex-direction:column">
@@ -8031,7 +8121,7 @@ function etuOficinaAbrir() {
     d.setAttribute("aria-label", "Lições da Palavra");
     d.innerHTML = '<small>UMA PALAVRA PARA A SUA VIDA</small><div class="lp-corpo"></div><div class="lp-ct"><div class="lp-dots">' + LICOES.map(function() {
       return "<i></i>";
-    }).join("") + '</div><div><button type="button" data-lp="-1" aria-label="Anterior">◀</button><button type="button" data-lp="p" aria-label="Pausar">❚❚</button><button type="button" data-lp="1" aria-label="Próxima">▶</button></div></div>';
+    }).join("") + '</div><div><button type="button" data-lp="-1" aria-label="Anterior">◀</button><button type="button" data-lp="p" aria-label="Pausar">❚❚</button><button type="button" data-lp="1" aria-label="Próxima">▶</button><button type="button" data-lp="o" aria-label="Ouvir">🗣</button></div></div>';
     if (ap && ap.nextSibling) v.insertBefore(d, ap.nextSibling);
     else v.appendChild(d);
     var i = Math.floor(Date.now() / 864e5) % LICOES.length, tm = null, pausa = false, corpo = d.querySelector(".lp-corpo");
@@ -8059,6 +8149,13 @@ function etuOficinaAbrir() {
     d.querySelectorAll("[data-lp]").forEach(function(b) {
       b.onclick = function() {
         var a = b.dataset.lp;
+        if (a === "o") {
+          var L = LICOES[i];
+          pausa = true;
+          clearTimeout(tm);
+          window.etuVoz && window.etuVoz.ouvir(L.t + ". " + L.v + " " + L.r + ". " + L.e + " Para a nossa vida: " + L.l, b);
+          return;
+        }
         if (a === "p") {
           pausa = !pausa;
           b.textContent = pausa ? "▶ Continuar" : "❚❚";
@@ -8171,6 +8268,10 @@ function etuOficinaAbrir() {
     { i: "guia-18.webp", s: "ESTAMOS COM VOCÊ", h: "Ajuda e segurança", p: "Toque em <b>Ajuda</b> ou no botão do <b>WhatsApp</b> para falar com a escola. A escola <b>nunca pede senha</b>, código por SMS ou Pix fora da chave exibida na plataforma." },
     { i: "brasao-redondo.webp", s: "2 TIMÓTEO 2.15", h: "Comece hoje a sua formação", p: "“Procura apresentar-te a Deus aprovado, como obreiro que não tem de que se envergonhar, que maneja bem a palavra da verdade.”", sem: 1, fim: 1 }
   ];
+  var FALA = { "Escola Teológica União": "A paz do Senhor. Seja muito bem-vindo à Escola Teológica União. Uma escola de formação bíblica, teológica e ministerial, com sede em Cristalina, Goiás. Nos próximos minutos, você vai conhecer a escola, os cursos e a plataforma de estudo. Acomode-se, e vamos juntos.", "Pr. Charlei de Jesus Lima Dias": "A escola é dirigida pelo Pastor Charlei de Jesus Lima Dias, idealizador e Diretor Geral. Ele prepara e acompanha o conteúdo de cada curso, numa linha pentecostal clássica, trinitária, e fiel às Escrituras. Nas palavras dele: estudar as Escrituras com seriedade, à luz do Espírito Santo, é preparar a vida, fortalecer o ministério, e servir melhor a Cristo.", "O que é um curso livre": "A escola oferece cursos livres de teologia. São cursos abertos a todos, amparados pela liberdade de ensino da Constituição Federal e pela Lei de Diretrizes e Bases da Educação. Eles preparam você para estudar a Bíblia com profundidade, ensinar na igreja e na Escola Dominical, e pregar a Palavra com segurança.", "Entenda a diferença": "É importante entender a diferença. O curso livre não é graduação e não depende do MEC. Ele forma para a vida cristã e para o ministério, com certificado verificável. Já a graduação reconhecida pelo MEC concede diploma de nível superior. Por isso, quem precisa desse diploma para concurso ou para lecionar em faculdade deve procurar uma graduação.", "Do Básico ao Avançado": "A formação acontece em três níveis. No Básico, as grandes doutrinas da Bíblia. No Médio, a arte de interpretar, ensinar e pregar. No Avançado, o aprofundamento para o ministério. E, além dos níveis, há especializações, livros e estudos, porque o conhecimento de Deus não se esgota.", "11 disciplinas, 11 apostilas": "O Curso Básico tem onze disciplinas, cada uma com a sua apostila. Da Introdução à Teologia até a Escatologia, passando por Bibliologia, Cristologia, Pneumatologia e Soteriologia. Toque em qualquer capa para ver de perto.", "10 disciplinas para ensinar e pregar": "O Curso Médio tem dez disciplinas, para quem deseja ensinar e pregar. Hermenêutica, os Panoramas do Antigo e do Novo Testamento, Geografia Bíblica, História de Israel e da Igreja, Homilética, Ética Cristã, Evangelismo e Missões, e Educação Cristã.", "11 disciplinas para o ministério": "O Curso Avançado tem onze disciplinas, para o aprofundamento no ministério. Exegese, Teologia Contemporânea, Filosofia e Fé Cristã, Teologia do Antigo e do Novo Testamento, Apologética, Seitas e Heresias, Teologia Pentecostal, Patrística, Teologia Pastoral, e Liderança.", "escolateologicauniao.github.io": "Para acessar a plataforma, abra o endereço oficial da escola no navegador: escola teológica união, ponto github, ponto i o. No Android, use o Chrome. No iPhone, use o Safari. Ela funciona no celular, no tablet, no computador e até na televisão.", "Instale o aplicativo": "Você também pode instalar o aplicativo da escola. No Chrome, toque nos três pontinhos e em instalar aplicativo. No iPhone, toque em compartilhar e em adicionar à tela de início. Sem baixar arquivos, e sem pedir acesso às suas fotos ou contatos.", "Conta e matrícula": "Para começar, crie a sua conta com o seu nome, o seu WhatsApp e o seu e-mail. A matrícula é feita pelo Pix, somente na chave exibida na plataforma, e o comprovante é enviado pelo WhatsApp oficial da escola.", "Vídeo e apostila": "Cada aula traz o vídeo e a apostila na mesma tela. Você pode aumentar ou diminuir a letra, e usar o modo noturno. Estude no seu ritmo, quando e onde puder.", "Aprenda com cada resposta": "As provas são corrigidas na hora. Se você errar, a sua resposta aparece em vermelho, e a resposta certa aparece em verde. A aprovação é com setenta por cento, e você pode refazer quantas vezes precisar.", "Certificado e carteirinha": "Ao concluir o curso, você recebe o certificado com código de verificação. E o aluno com matrícula ativa recebe a carteira de estudante, válida por três anos. Qualquer pessoa pode conferir a autenticidade dos documentos na própria plataforma.", "Palavra do dia e Oficina do Sermão": "Para quem ama a Palavra, todos os dias há uma palavra da Bíblia explicada no hebraico ou no grego. E, na Oficina do Sermão, o mesmo texto bíblico aparece organizado em três formas de pregar: temático, textual e expositivo.", "Desafio Bíblico": "No Desafio Bíblico, você aprende brincando. São perguntas em quatro níveis, e charadas de quem sou eu, sempre com a explicação bíblica de cada resposta.", "Cores, brasão e avisos": "A plataforma fica do seu jeito. No botão A a, no alto da tela, você escolhe a cor, o brasão, o tamanho da letra, o brilho, o volume e a voz. E, no sininho, você ativa as notificações para receber os avisos da escola.", "Ajuda e segurança": "Sempre que precisar, toque em ajuda, ou no botão do WhatsApp, para falar com a escola. E lembre-se: a escola nunca pede a sua senha, nunca pede código por mensagem, e nunca pede Pix fora da chave exibida na plataforma.", "Comece hoje a sua formação": "Procura apresentar-te a Deus aprovado, como obreiro que não tem de que se envergonhar, que maneja bem a palavra da verdade. Segunda carta a Timóteo, capítulo dois, versículo quinze. Comece hoje a sua formação na Escola Teológica União. Que Deus abençoe a sua vida." };
+  SL.forEach(function(x) {
+    if (FALA[x.h]) x.fala = FALA[x.h];
+  });
   var DUR = 11e3;
   window.etuTour = function() {
     if (document.getElementById("etuTour")) return;
@@ -8229,7 +8330,7 @@ function etuOficinaAbrir() {
     }
     function narra() {
       var S2 = SL[i];
-      window.etuVoz.fala(S2.h + ". " + S2.p, function() {
+      window.etuVoz.fala(S2.fala || S2.h + ". " + S2.p, function() {
         if (!pausa && window.etuVoz.ligado() && document.getElementById("etuTour")) tm = setTimeout(function() {
           mostra(i + 1);
         }, 900);
@@ -8317,7 +8418,14 @@ function etuOficinaAbrir() {
     };
     document.addEventListener("keydown", tecla);
     document.addEventListener("visibilitychange", vis);
-    mus(true);
+    var MD = window.etuVoz ? window.etuVoz.modo() : "musica";
+    if (MD === "ambos" || MD === "musica") mus(true);
+    if ((MD === "ambos" || MD === "voz") && window.etuVoz && window.etuVoz.disponivel) {
+      window.etuVoz.liga(true);
+      bt("nz").setAttribute("aria-pressed", true);
+      bt("nz").textContent = "🗣 Parar narração";
+      o.classList.add("narrando");
+    }
     mostra(0);
     bt("x").focus({ preventScroll: true });
   };
@@ -8371,7 +8479,7 @@ function etuOficinaAbrir() {
 })();
 (function() {
   var css = document.createElement("style");
-  css.textContent = ".wz-salas{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px}.wz-salas button{flex:none;min-height:42px;padding:0 16px;border-radius:22px;border:1.5px solid #C9A24A;background:#fff;color:#1B2238;font:600 15px Georgia,serif;cursor:pointer}.wz-salas button[aria-selected=true]{background:var(--navy,#0F1E3D);color:#F7EFD9}.wz{border:1px solid #D9CBA6;border-radius:16px;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,.08)}.wz-topo{display:flex;align-items:center;gap:10px;background:var(--navy,#0F1E3D);color:#F7EFD9;padding:10px 14px}.wz-topo img{width:40px;height:40px}.wz-topo b{display:block;font-family:Cinzel,Georgia,serif;color:#E2C47A}.wz-topo span{font-size:13.5px;color:#d8d0bb}.wz-lista{border:0!important;border-radius:0!important;height:58vh!important;background:#EFE7D6 radial-gradient(circle at 20% 20%,rgba(201,162,74,.10) 0 2px,transparent 3px) 0 0/26px 26px!important;padding:12px 10px!important}.wz-m{position:relative;max-width:80%!important;border:0!important;border-radius:12px 12px 12px 4px!important;background:#fff!important;box-shadow:0 1px 2px rgba(0,0,0,.12);padding:7px 10px 4px!important;margin:6px 0!important}.wz-m.eu{margin-left:auto!important;background:#DCEFD2!important;border-radius:12px 12px 4px 12px!important}.wz-m .com-nome{font-weight:700;font-size:13.5px;color:#8C6A1E;margin-bottom:2px}.wz-m .com-txt{font-size:16px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}.wz-h{text-align:right;font-size:11.5px;color:#6b6f7b;margin-top:2px}.wz-dia{text-align:center;margin:10px 0}.wz-dia span{background:#FFF7E3;border-radius:8px;padding:3px 10px;font-size:12.5px;color:#5b6070;box-shadow:0 1px 1px rgba(0,0,0,.08)}.wz-vazio{text-align:center;color:#5b6070;margin-top:30%}.wz-form{margin:0!important;background:#F4EEE1;padding:8px;align-items:flex-end}.wz-form textarea{border-radius:22px!important;padding:10px 14px!important;resize:none;min-height:44px;font-size:16px}.wz-env{width:48px;height:48px;border-radius:50%;border:0;background:#C9A24A;color:#0F1B3D;font-size:20px;cursor:pointer;flex:none}.zm{position:fixed;inset:0;z-index:9999;background:#050A14;touch-action:none;overflow:hidden}.zm img{position:absolute;left:50%;top:50%;max-width:96vw;max-height:84vh;transform-origin:center;user-select:none;-webkit-user-drag:none;will-change:transform}.zm-ct{position:absolute;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;gap:10px}.zm-ct button,.zm-x{min-width:48px;height:48px;border-radius:24px;border:1px solid rgba(226,196,122,.8);background:rgba(15,27,61,.85);color:#fff;font:700 18px Georgia,serif;cursor:pointer;padding:0 14px}.zm-x{position:absolute;top:12px;right:12px}.zm-dica{position:absolute;top:18px;left:16px;right:76px;color:#E2C47A;font:15px Georgia,serif}[data-zoomavel]{cursor:zoom-in}.tr-trilho img{cursor:zoom-in}.aa-bt{font:700 16px Georgia,serif!important;letter-spacing:0!important;width:36px!important;margin-right:6px!important}.aa-bt+.sino{margin-left:0!important}.aa-l{margin:14px 0 8px;font-weight:700;color:#1B2238}.aa-row{display:flex;align-items:center;gap:12px}.aa-row input[type=range]{flex:1;accent-color:#8C6A1E;height:30px}";
+  css.textContent = ".wz-salas{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px}.wz-salas button{flex:none;min-height:42px;padding:0 16px;border-radius:22px;border:1.5px solid #C9A24A;background:#fff;color:#1B2238;font:600 15px Georgia,serif;cursor:pointer}.wz-salas button[aria-selected=true]{background:var(--navy,#0F1E3D);color:#F7EFD9}.wz{border:1px solid #D9CBA6;border-radius:16px;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,.08)}.wz-topo{display:flex;align-items:center;gap:10px;background:var(--navy,#0F1E3D);color:#F7EFD9;padding:10px 14px}.wz-topo img{width:40px;height:40px}.wz-topo b{display:block;font-family:Cinzel,Georgia,serif;color:#E2C47A}.wz-topo span{font-size:13.5px;color:#d8d0bb}.wz-lista{border:0!important;border-radius:0!important;height:58vh!important;background:#EFE7D6 radial-gradient(circle at 20% 20%,rgba(201,162,74,.10) 0 2px,transparent 3px) 0 0/26px 26px!important;padding:12px 10px!important}.wz-m{position:relative;max-width:80%!important;border:0!important;border-radius:12px 12px 12px 4px!important;background:#fff!important;box-shadow:0 1px 2px rgba(0,0,0,.12);padding:7px 10px 4px!important;margin:6px 0!important}.wz-m.eu{margin-left:auto!important;background:#DCEFD2!important;border-radius:12px 12px 4px 12px!important}.wz-m .com-nome{font-weight:700;font-size:13.5px;color:#8C6A1E;margin-bottom:2px}.wz-m .com-txt{font-size:16px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}.wz-h{text-align:right;font-size:11.5px;color:#6b6f7b;margin-top:2px}.wz-dia{text-align:center;margin:10px 0}.wz-dia span{background:#FFF7E3;border-radius:8px;padding:3px 10px;font-size:12.5px;color:#5b6070;box-shadow:0 1px 1px rgba(0,0,0,.08)}.wz-vazio{text-align:center;color:#5b6070;margin-top:30%}.wz-form{margin:0!important;background:#F4EEE1;padding:8px;align-items:flex-end}.wz-form textarea{border-radius:22px!important;padding:10px 14px!important;resize:none;min-height:44px;font-size:16px}.wz-env{width:48px;height:48px;border-radius:50%;border:0;background:#C9A24A;color:#0F1B3D;font-size:20px;cursor:pointer;flex:none}.zm{position:fixed;inset:0;z-index:9999;background:#050A14;touch-action:none;overflow:hidden}.zm img{position:absolute;left:50%;top:50%;max-width:96vw;max-height:84vh;transform-origin:center;user-select:none;-webkit-user-drag:none;will-change:transform}.zm-ct{position:absolute;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;gap:10px}.zm-ct button,.zm-x{min-width:48px;height:48px;border-radius:24px;border:1px solid rgba(226,196,122,.8);background:rgba(15,27,61,.85);color:#fff;font:700 18px Georgia,serif;cursor:pointer;padding:0 14px}.zm-x{position:absolute;top:12px;right:12px}.zm-dica{position:absolute;top:18px;left:16px;right:76px;color:#E2C47A;font:15px Georgia,serif}[data-zoomavel]{cursor:zoom-in}.tr-trilho img{cursor:zoom-in}.aa-bt{font:700 16px Georgia,serif!important;letter-spacing:0!important;width:36px!important;margin-right:6px!important}.aa-bt+.sino{margin-left:0!important}.aa-l{margin:14px 0 8px;font-weight:700;color:#1B2238}.ap-seg[style*=wrap]{display:grid;grid-template-columns:1fr 1fr;width:100%}.ap-seg[style*=wrap] button{border-right:0;border-bottom:1px solid #E1D4B2}.ap-seg[style*=wrap] button:nth-child(odd){border-right:1px solid #E1D4B2}.aa-row{display:flex;align-items:center;gap:12px}.aa-row input[type=range]{flex:1;accent-color:#8C6A1E;height:30px}";
   document.head.appendChild(css);
   window.etuZoom = function(src, alt, foco) {
     var o = document.createElement("div");
@@ -8563,8 +8671,12 @@ function etuOficinaAbrir() {
       return '<button type="button" data-tam="' + t[0] + '" aria-pressed="' + (tam === t[0]) + '">' + t[1] + "</button>";
     }).join("") + '</div><p class="aa-l">Brilho da tela</p><div class="ap-seg" role="group">' + [["suave", "Suave"], ["normal", "Normal"], ["intenso", "Intenso"]].map(function(t) {
       return '<button type="button" data-bri="' + t[0] + '" aria-pressed="' + (bri === t[0]) + '">' + t[1] + "</button>";
-    }).join("") + '</div><p class="aa-l">Cor do aplicativo e brasão</p><div class="ap-bts" style="margin-top:0"><button type="button" class="btn btn-gold btn-sm" data-aa="cores"><i class="ap-roda"></i>Opções de cores</button><button type="button" class="btn btn-line btn-sm" data-aa="brasao" style="color:#1B2238">Estilo do brasão</button></div><p class="aa-l">Volume da música ambiente</p><div class="aa-row"><button type="button" class="btn btn-line btn-sm" data-vol="-10" aria-label="Diminuir o volume" style="color:#1B2238;min-width:48px">−</button><input type="range" min="0" max="100" step="5" value="' + vol + '" aria-label="Volume da música"><button type="button" class="btn btn-line btn-sm" data-vol="10" aria-label="Aumentar o volume" style="color:#1B2238;min-width:48px">+</button><b id="aaVol" style="min-width:44px;text-align:right">' + vol + '%</b></div><p style="margin:14px 0 0;font-size:14px;color:#5b6070">Para ver de perto uma imagem ou a capa de uma apostila, toque nela: abre o visor com zoom. Tudo fica guardado só neste aparelho.</p>';
-    window.etuAp.folha("Leitura, brilho e cores", h, function(o) {
+    }).join("") + '</div><p class="aa-l">Cor do aplicativo e brasão</p><div class="ap-bts" style="margin-top:0"><button type="button" class="btn btn-gold btn-sm" data-aa="cores"><i class="ap-roda"></i>Opções de cores</button><button type="button" class="btn btn-line btn-sm" data-aa="brasao" style="color:#1B2238">Estilo do brasão</button></div><p class="aa-l">Volume da música ambiente</p><div class="aa-row"><button type="button" class="btn btn-line btn-sm" data-vol="-10" aria-label="Diminuir o volume" style="color:#1B2238;min-width:48px">−</button><input type="range" min="0" max="100" step="5" value="' + vol + '" aria-label="Volume da música"><button type="button" class="btn btn-line btn-sm" data-vol="10" aria-label="Aumentar o volume" style="color:#1B2238;min-width:48px">+</button><b id="aaVol" style="min-width:44px;text-align:right">' + vol + '%</b></div><p class="aa-l">Som da apresentação</p><div class="ap-seg" role="group" style="flex-wrap:wrap">' + [["ambos", "Voz e música"], ["musica", "Só música"], ["voz", "Só voz"], ["mudo", "Mudo"]].map(function(t) {
+      return '<button type="button" data-modo="' + t[0] + '" aria-pressed="' + (ler("etu_som_modo", "musica") === t[0]) + '">' + t[1] + "</button>";
+    }).join("") + '</div><p class="aa-l">Tipo de voz</p><div class="ap-seg" role="group" style="flex-wrap:wrap">' + Object.keys(window.etuVoz ? window.etuVoz.TIMBRES : {}).map(function(k) {
+      return '<button type="button" data-timbre="' + k + '" aria-pressed="' + (ler("etu_voz_timbre", "natural") === k) + '">' + window.etuVoz.TIMBRES[k].n + "</button>";
+    }).join("") + '</div><div id="aaVozes"></div><div class="ap-bts"><button type="button" class="btn btn-gold btn-sm" data-aa="testar">🗣 Ouvir a voz escolhida</button></div><p style="margin:14px 0 0;font-size:14px;color:#5b6070">Para ver de perto uma imagem ou a capa de uma apostila, toque nela: abre o visor com zoom. Tudo fica guardado só neste aparelho.</p>';
+    window.etuAp.folha("Leitura, brilho, cores, som e voz", h, function(o) {
       o.querySelectorAll("[data-tam]").forEach(function(b) {
         b.onclick = function() {
           grava("etu_tam", b.dataset.tam);
@@ -8595,6 +8707,48 @@ function etuOficinaAbrir() {
           window.etuVolPasso(+b.dataset.vol);
         };
       });
+      o.querySelectorAll("[data-modo]").forEach(function(b) {
+        b.onclick = function() {
+          grava("etu_som_modo", b.dataset.modo);
+          o.querySelectorAll("[data-modo]").forEach(function(x) {
+            x.setAttribute("aria-pressed", x === b);
+          });
+          if (b.dataset.modo === "mudo" && window.etuVoz) {
+            window.etuVoz.para();
+          }
+        };
+      });
+      o.querySelectorAll("[data-timbre]").forEach(function(b) {
+        b.onclick = function() {
+          grava("etu_voz_timbre", b.dataset.timbre);
+          o.querySelectorAll("[data-timbre]").forEach(function(x) {
+            x.setAttribute("aria-pressed", x === b);
+          });
+          window.etuVoz && window.etuVoz.teste();
+        };
+      });
+      var tv = o.querySelector("[data-aa=testar]");
+      if (tv) tv.onclick = function() {
+        window.etuVoz && window.etuVoz.teste();
+      };
+      var VZ = window.etuVoz ? window.etuVoz.vozes() : [];
+      if (VZ.length > 1) {
+        var atual = ler("etu_voz_nome", "");
+        var box = o.querySelector("#aaVozes");
+        box.innerHTML = '<p class="aa-l">Vozes do seu aparelho (' + VZ.length + ')</p><select id="aaVozSel" style="width:100%;min-height:44px;font-size:16px;border:1.5px solid #C9A24A;border-radius:10px;padding:6px 10px;background:#fff;color:#1B2238">' + VZ.map(function(v, k) {
+          var nm = v.name.replace(/Microsoft |Google |Online \(Natural\)/g, "").trim();
+          return '<option value="' + v.voiceURI.replace(/"/g, "&quot;") + '"' + (v.voiceURI === atual || !atual && k === 0 ? " selected" : "") + ">" + nm.replace(/</g, "&lt;") + " · " + v.lang + "</option>";
+        }).join("") + "</select>";
+        o.querySelector("#aaVozSel").onchange = function(e) {
+          grava("etu_voz_nome", e.target.value);
+          window.etuVoz.teste();
+        };
+      }
+      if (!window.etuVoz || !window.etuVoz.disponivel) {
+        o.querySelectorAll("[data-timbre],[data-aa=testar]").forEach(function(x) {
+          x.disabled = true;
+        });
+      }
       var r = o.querySelector("input[type=range]");
       r.oninput = function() {
         grava("etu_vol", r.value);
